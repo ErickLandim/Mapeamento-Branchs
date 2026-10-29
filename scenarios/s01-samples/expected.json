@@ -1,0 +1,23 @@
+{
+  "description": "samples/src com os testes DUnitX (Win64) + DUnit (Win32). Valores calculados à mão.",
+  "methods": [
+    {"name": "calcular", "branch": [4, 5], "condition": [0, 0], "combination": [0, 0],
+     "uncovered": ["L12 method nenhum entrou"]},
+    {"name": "TPedido.Confirmar", "branch": [3, 5], "condition": [2, 4], "combination": [1, 3],
+     "uncovered": ["L54 if falso", "L46 method nenhum entrou",
+                   "L54 if FEstoque <> nil = F", "L54 if FEstoque.Disponivel(FItem, FQtd) = F",
+                   "L54 if (F,-) => F", "L54 if (T,F) => F"]},
+    {"name": "TPedido.Total", "branch": [2, 3], "uncovered": ["L67 if verdadeiro"]},
+    {"name": "PodeAprovar", "branch": [3, 3], "condition": [3, 6], "combination": [2, 4],
+     "uncovered": ["L22 if TemRenda = F", "L22 if TemFiador = T", "L22 if TemFiador = F",
+                   "L22 if (T,F,F) => F", "L22 if (T,F,T) => T"]},
+    {"name": "Classificar", "branch": [5, 5], "uncovered": []},
+    {"name": "SomaAte", "branch": [3, 3], "uncovered": []},
+    {"name": "ContarDigitos", "branch": [1, 2], "uncovered": ["L52 repeat until falso (repete)"]},
+    {"name": "Desconto", "branch": [6, 9], "condition": [3, 6], "combination": [2, 4],
+     "uncovered": ["L61 if verdadeiro", "L65 if falso", "L58 method nenhum entrou",
+                   "L63 if Categoria = catPrata = T", "L63 if Valor > 100 = T", "L63 if Valor > 100 = F",
+                   "L63 if (F,T,F) => F", "L63 if (F,T,T) => T"]},
+    {"name": "Faixa", "branch": [0, 7]}
+  ]
+}

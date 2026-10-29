@@ -1,0 +1,309 @@
+{
+ "description": "s02: herança/virtual, case com faixas, ifs aninhados, and/or/not, for/for-in/downto com Break/Continue, recursão, exceções, rotina aninhada, método anônimo, xor. Conferido item a item à mão.",
+ "methods": [
+  {
+   "name": "TForma.Descricao",
+   "branch": [
+    1,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L53 if falso",
+    "L51 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "TRetangulo.Create",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    3,
+    4
+   ],
+   "combination": [
+    2,
+    3
+   ],
+   "uncovered": [
+    "L64 if AAltura < 0 = T",
+    "L64 if (F,T) => T"
+   ]
+  },
+  {
+   "name": "TRetangulo.Descricao",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": []
+  },
+  {
+   "name": "Nivel",
+   "branch": [
+    4,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L99 case rótulo 11..50"
+   ]
+  },
+  {
+   "name": "Aninhado",
+   "branch": [
+    8,
+    9
+   ],
+   "condition": [
+    4,
+    8
+   ],
+   "combination": [
+    3,
+    6
+   ],
+   "uncovered": [
+    "L111 if B = F",
+    "L111 if (F,-) => F",
+    "L113 if falso",
+    "L113 if B = F",
+    "L113 if C = T",
+    "L113 if C = F",
+    "L113 if (F,F) => F",
+    "L113 if (F,T) => T"
+   ]
+  },
+  {
+   "name": "BuscaPrimeiroPar",
+   "branch": [
+    3,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L127 for não entrou no loop",
+    "L122 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "SomaPositivos",
+   "branch": [
+    3,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L142 for não entrou no loop",
+    "L137 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Fatorial",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": []
+  },
+  {
+   "name": "Validar",
+   "branch": [
+    3,
+    5
+   ],
+   "condition": [
+    2,
+    4
+   ],
+   "combination": [
+    1,
+    3
+   ],
+   "uncovered": [
+    "L163 if falso",
+    "L163 if Idade < 0 = T",
+    "L163 if Idade > 150 = F",
+    "L163 if (T,-) => T",
+    "L163 if (F,F) => F",
+    "L158 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Contem",
+   "branch": [
+    1,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L175 if falso",
+    "L172 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Ternario",
+   "branch": [
+    2,
+    3
+   ],
+   "condition": [
+    3,
+    4
+   ],
+   "combination": [
+    2,
+    3
+   ],
+   "uncovered": [
+    "L184 while Y > 0 = F",
+    "L184 while (F,-) => F",
+    "L179 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "ComNested.Dobro",
+   "branch": [
+    2,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L193 if verdadeiro"
+   ]
+  },
+  {
+   "name": "ComNested",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": []
+  },
+  {
+   "name": "<anon@209>",
+   "branch": [
+    1,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L211 if falso",
+    "L209 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Desde",
+   "branch": [
+    1,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L224 for não entrou no loop",
+    "L219 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Xor2",
+   "branch": [
+    1,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L230 if falso",
+    "L228 method nenhum entrou"
+   ]
+  }
+ ]
+}

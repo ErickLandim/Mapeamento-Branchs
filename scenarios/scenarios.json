@@ -1,0 +1,9 @@
+{
+  "scenarios": [
+    {"name": "s01-samples", "root": ".", "src": ["samples/src"],
+     "tests": ["samples/tests/dunitx", "samples/tests/dunit"],
+     "projects": ["samples/tests/dunitx/SampleTestsDUnitX.dproj@Win64", "samples/tests/dunit/SampleTestsDUnit.dproj@Win32"]},
+    {"name": "s02-avancado", "root": "scenarios/s02-avancado", "src": ["src"], "tests": ["tests"],
+     "projects": ["tests/S02Tests.dproj@Win64"]}
+  ]
+}

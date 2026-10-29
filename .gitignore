@@ -1,0 +1,16 @@
+﻿Win32/
+Win64/
+*.dcu
+*.exe
+*.local
+*.identcache
+*.res
+*.dsk
+*.stat
+__history/
+__recovery/
+
+.bcov/
+bcov/bin/
+tools/bcovscan/bcovscan.exe
+*.bcovhits.json
