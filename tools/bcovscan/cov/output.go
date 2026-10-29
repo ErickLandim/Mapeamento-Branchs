@@ -1,6 +1,7 @@
 package cov
 
 import (
+	"bufio"
 	"encoding/xml"
 	"fmt"
 	"html/template"
@@ -68,7 +69,11 @@ func WriteHTML(path string, r *Report) error {
 		return err
 	}
 	defer f.Close()
-	return htmlTpl.Execute(f, map[string]any{"R": r, "When": time.Now().Format("2006-01-02 15:04"), "Sources": strings.Join(r.Sources, ", ")})
+	w := bufio.NewWriter(f)
+	if err := htmlTpl.Execute(w, map[string]any{"R": r, "When": time.Now().Format("2006-01-02 15:04"), "Sources": strings.Join(r.Sources, ", ")}); err != nil {
+		return err
+	}
+	return w.Flush()
 }
 
 // Cobertura XML (GitLab coverage visualization). Each decision line is a
@@ -118,7 +123,10 @@ func rate(c, t int) string {
 }
 
 func WriteCobertura(path string, r *Report) error {
-	type agg struct{ cov, tot int; hits int64 }
+	type agg struct {
+		cov, tot int
+		hits     int64
+	}
 	files := map[string]map[int]*agg{}
 	for _, m := range r.Methods {
 		for _, it := range m.Items {

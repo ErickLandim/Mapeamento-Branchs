@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/ErickLandim/Mapeamento-Branchs/tools/bcovscan/pascal"
 )
@@ -25,6 +27,13 @@ type MapMethod struct {
 	Name     string `json:"name"`
 	Line     int    `json:"line"`
 	Entering bool   `json:"entering"`
+	// path combinations: mode "full" (whole paths) or "pairs", the
+	// path-level decisions, each possible combination ("dec:out,...") and
+	// how many impossible combinations were left out
+	PathMode       string   `json:"pathMode,omitempty"`
+	PathDecs       []int    `json:"pathDecs,omitempty"`
+	Paths          []string `json:"paths,omitempty"`
+	PathImpossible int      `json:"pathImpossible,omitempty"`
 }
 
 type MapCond struct {
@@ -92,8 +101,34 @@ func BuildMap(a *pascal.Analysis, root string) *Map {
 		}
 		m.Files = append(m.Files, filepath.ToSlash(rel))
 	}
-	for _, r := range a.Methods {
-		m.Methods = append(m.Methods, MapMethod{ID: r.ID, File: fileIdx[a.Owner[r]], Name: pascal.MethodDisplayName(r), Line: r.Line, Entering: r.HasEntering()})
+	// path analysis is independent per method: run it in parallel
+	paths := make([]*pascal.MethodPaths, len(a.Methods))
+	var wg sync.WaitGroup
+	next := make(chan int)
+	for w := 0; w < runtime.NumCPU(); w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				paths[i] = a.Paths(a.Methods[i])
+			}
+		}()
+	}
+	for i := range a.Methods {
+		next <- i
+	}
+	close(next)
+	wg.Wait()
+	for i, r := range a.Methods {
+		mm := MapMethod{ID: r.ID, File: fileIdx[a.Owner[r]], Name: pascal.MethodDisplayName(r), Line: r.Line, Entering: r.HasEntering()}
+		if p := paths[i]; p.Mode != "" {
+			mm.PathMode, mm.PathDecs, mm.PathImpossible = p.Mode, p.Decs, p.Impossible
+			mm.Paths = []string{}
+			for _, it := range p.Items {
+				mm.Paths = append(mm.Paths, pascal.PathKey(it))
+			}
+		}
+		m.Methods = append(m.Methods, mm)
 	}
 	for _, d := range a.Decisions {
 		md := MapDecision{ID: d.ID, Method: d.Routine.ID, File: fileIdx[a.Owner[d.Routine]], Kind: d.Kind, Line: d.Line, Col: d.Col, Text: d.Text,

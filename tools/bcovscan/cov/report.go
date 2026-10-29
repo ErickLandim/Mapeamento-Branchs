@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -11,6 +12,7 @@ const (
 	CatBranch = "branch"
 	CatCond   = "condition"
 	CatCombo  = "combination"
+	CatPath   = "path"
 )
 
 type Item struct {
@@ -24,6 +26,7 @@ type Item struct {
 	Label    string `json:"label"`
 	Count    int64  `json:"count"`
 	Covered  bool   `json:"covered"`
+	Path     string `json:"path,omitempty"` // path items: "dec:out,..."
 }
 
 // Key identifies an item independently of numbering, so results produced
@@ -61,6 +64,7 @@ type Summary struct {
 	Branch Ratio `json:"branch"`
 	Cond   Ratio `json:"condition"`
 	Combo  Ratio `json:"combination"`
+	Path   Ratio `json:"path"`
 	All    Ratio `json:"all"`
 }
 
@@ -72,6 +76,8 @@ func (s *Summary) add(it Item) {
 		s.Cond.add(it.Covered)
 	case CatCombo:
 		s.Combo.add(it.Covered)
+	case CatPath:
+		s.Path.add(it.Covered)
 	}
 	s.All.add(it.Covered)
 }
@@ -80,25 +86,30 @@ func (s *Summary) finish() {
 	s.Branch.finish()
 	s.Cond.finish()
 	s.Combo.finish()
+	s.Path.finish()
 	s.All.finish()
 }
 
 type MethodReport struct {
-	ID      int       `json:"id"`
-	Name    string    `json:"name"`
-	File    string    `json:"file"`
-	Line    int       `json:"line"`
-	Calls   int64     `json:"calls"`
-	Summary Summary   `json:"summary"`
-	Paths   []PathRow `json:"paths"`
-	Items   []Item    `json:"items"`
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	File  string `json:"file"`
+	Line  int    `json:"line"`
+	Calls int64  `json:"calls"`
+	// PathMode is "full", "pairs" or ""; ImpossiblePaths counts the
+	// combinations proven impossible (left out of the percentages)
+	PathMode        string    `json:"pathMode,omitempty"`
+	ImpossiblePaths int       `json:"impossiblePaths"`
+	Summary         Summary   `json:"summary"`
+	Paths           []PathRow `json:"paths"`
+	Items           []Item    `json:"items"`
 }
 
 type Report struct {
-	Sources []string        `json:"sources"`
-	Total   Summary         `json:"total"`
+	Sources []string           `json:"sources"`
+	Total   Summary            `json:"total"`
 	Files   map[string]Summary `json:"files"`
-	Methods []*MethodReport `json:"methods"`
+	Methods []*MethodReport    `json:"methods"`
 }
 
 // Merge sums several hits files.
@@ -277,6 +288,38 @@ func Compute(m *Map, h *Hits) *Report {
 		n := meth[mm.ID][1]
 		mr.Items = append(mr.Items, Item{Category: CatBranch, Method: mm.ID, Decision: -1, File: mr.File, Line: mm.Line, Col: 1, Kind: "method", Label: "nenhum entrou", Count: n, Covered: n > 0})
 	}
+	decByID := map[int]MapDecision{}
+	for _, d := range m.Decisions {
+		decByID[d.ID] = d
+	}
+	observed := map[int][]map[int][]string{} // method -> outcome set of each observed call path
+	obsCount := map[int][]int64{}
+	for _, p := range h.Path {
+		observed[p.Method] = append(observed[p.Method], parseSig(p.Sig))
+		obsCount[p.Method] = append(obsCount[p.Method], p.Count)
+	}
+	for _, mm := range m.Methods {
+		if mm.PathMode == "" {
+			continue
+		}
+		mr := byID[mm.ID]
+		mr.PathMode, mr.ImpossiblePaths = mm.PathMode, mm.PathImpossible
+		var projs []map[int]string
+		for _, sig := range observed[mm.ID] {
+			projs = append(projs, projectPath(sig, mm.PathDecs, decByID))
+		}
+		for _, key := range mm.Paths {
+			want := parseItem(key)
+			var n int64
+			for i, pr := range projs {
+				if pathMatches(want, pr, mm.PathMode == "full") {
+					n += obsCount[mm.ID][i]
+				}
+			}
+			mr.Items = append(mr.Items, Item{Category: CatPath, Method: mm.ID, Decision: -1, File: mr.File, Line: mm.Line, Col: 1,
+				Kind: "caminho", Label: PathLabel(want, decByID), Count: n, Covered: n > 0, Path: key})
+		}
+	}
 	files := map[string]*Summary{}
 	for _, mr := range rep.Methods {
 		sort.SliceStable(mr.Paths, func(i, j int) bool { return mr.Paths[i].Sig < mr.Paths[j].Sig })
@@ -300,18 +343,148 @@ func Compute(m *Map, h *Hits) *Report {
 	return rep
 }
 
+type pathOut struct {
+	dec int
+	out string
+}
+
+func parseItem(key string) []pathOut {
+	var out []pathOut
+	for _, part := range strings.Split(key, ",") {
+		c := strings.IndexByte(part, ':')
+		if c < 0 {
+			continue
+		}
+		d, err := strconv.Atoi(part[:c])
+		if err != nil {
+			continue
+		}
+		out = append(out, pathOut{d, part[c+1:]})
+	}
+	return out
+}
+
+// parseSig reads an observed signature: the set of outcomes ("dec:T",
+// "dec:a<probe>", "dec:E", ...) one call produced. The runtime may
+// zero-pad the decision number.
+func parseSig(sig string) map[int][]string {
+	out := map[int][]string{}
+	for _, p := range parseItem(sig) {
+		out[p.dec] = append(out[p.dec], p.out)
+	}
+	return out
+}
+
+func has(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
+// projectPath maps an observed outcome set onto the path-level decisions
+// using the path outcome codes (while: entered / not entered, repeat:
+// repeated / once).
+func projectPath(sig map[int][]string, decs []int, byID map[int]MapDecision) map[int]string {
+	out := map[int]string{}
+	for _, d := range decs {
+		os, ok := sig[d]
+		if !ok {
+			continue
+		}
+		switch byID[d].Kind {
+		case "while":
+			if has(os, "T") {
+				out[d] = "E"
+			} else if has(os, "F") {
+				out[d] = "N"
+			}
+		case "repeat":
+			if has(os, "F") {
+				out[d] = "R"
+			} else if has(os, "T") {
+				out[d] = "U"
+			}
+		default:
+			if len(os) == 1 {
+				out[d] = os[0]
+			}
+		}
+	}
+	return out
+}
+
+// pathMatches: in full mode the call took exactly this combination; in
+// pairs mode it took both outcomes of the pair.
+func pathMatches(want []pathOut, got map[int]string, full bool) bool {
+	if full && len(got) != len(want) {
+		return false
+	}
+	for _, w := range want {
+		if got[w.dec] != w.out {
+			return false
+		}
+	}
+	return true
+}
+
+// OutcomeText names one outcome of a decision.
+func OutcomeText(d MapDecision, out string) string {
+	switch out {
+	case "T":
+		return "verdadeiro"
+	case "F":
+		return "falso"
+	case "E":
+		return "entrou"
+	case "N":
+		return "não entrou"
+	case "R":
+		return "repetiu"
+	case "U":
+		return "uma vez"
+	}
+	if strings.HasPrefix(out, "a") {
+		p, _ := strconv.Atoi(out[1:])
+		for _, arm := range d.Arms {
+			if arm.Probe == p {
+				if arm.Label == "else" {
+					if arm.Implicit {
+						return "nenhum rótulo"
+					}
+					return "else"
+				}
+				return "rótulo " + arm.Label
+			}
+		}
+	}
+	return out
+}
+
+func PathLabel(outs []pathOut, byID map[int]MapDecision) string {
+	parts := make([]string, len(outs))
+	for i, o := range outs {
+		d := byID[o.dec]
+		parts[i] = fmt.Sprintf("%s L%d %s", d.Kind, d.Line, OutcomeText(d, o.out))
+	}
+	return strings.Join(parts, " + ")
+}
+
 // WriteText prints a human readable summary.
 func (r *Report) WriteText(w io.Writer, detail bool) {
 	fmt.Fprintf(w, "Branch coverage : %s\n", r.Total.Branch)
 	fmt.Fprintf(w, "Condition       : %s\n", r.Total.Cond)
 	fmt.Fprintf(w, "Combination     : %s\n", r.Total.Combo)
+	fmt.Fprintf(w, "Path            : %s\n", r.Total.Path)
 	fmt.Fprintf(w, "All items       : %s\n", r.Total.All)
 	for _, mr := range r.Methods {
 		if len(mr.Items) == 0 {
 			continue
 		}
-		fmt.Fprintf(w, "\n%s:%d %s  branch %s  cond %s  combo %s  calls=%d\n", mr.File, mr.Line, mr.Name,
-			mr.Summary.Branch, mr.Summary.Cond, mr.Summary.Combo, mr.Calls)
+		fmt.Fprintf(w, "\n%s:%d %s  branch %s  cond %s  combo %s  path %s  calls=%d\n", mr.File, mr.Line, mr.Name,
+			mr.Summary.Branch, mr.Summary.Cond, mr.Summary.Combo, mr.Summary.Path, mr.Calls)
 		if !detail {
 			continue
 		}

@@ -15,6 +15,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": [
     "L53 if falso",
     "L51 method nenhum entrou"
@@ -33,6 +37,10 @@
    "combination": [
     2,
     3
+   ],
+   "path": [
+    0,
+    0
    ],
    "uncovered": [
     "L64 if AAltura < 0 = T",
@@ -53,6 +61,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": []
   },
   {
@@ -66,6 +78,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -87,6 +103,10 @@
     3,
     6
    ],
+   "path": [
+    4,
+    5
+   ],
    "uncovered": [
     "L111 if B = F",
     "L111 if (F,-) => F",
@@ -95,7 +115,8 @@
     "L113 if C = T",
     "L113 if C = F",
     "L113 if (F,F) => F",
-    "L113 if (F,T) => T"
+    "L113 if (F,T) => T",
+    "L106 caminho if L109 verdadeiro + if L111 falso + if L113 falso"
    ]
   },
   {
@@ -109,6 +130,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -131,6 +156,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": [
     "L142 for não entrou no loop",
     "L137 method nenhum entrou"
@@ -150,6 +179,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": []
   },
   {
@@ -166,13 +199,18 @@
     1,
     3
    ],
+   "path": [
+    2,
+    3
+   ],
    "uncovered": [
     "L163 if falso",
     "L163 if Idade < 0 = T",
     "L163 if Idade > 150 = F",
     "L163 if (T,-) => T",
     "L163 if (F,F) => F",
-    "L158 method nenhum entrou"
+    "L158 method nenhum entrou",
+    "L158 caminho if L161 falso + if L163 falso"
    ]
   },
   {
@@ -186,6 +224,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -208,6 +250,10 @@
     2,
     3
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": [
     "L184 while Y > 0 = F",
     "L184 while (F,-) => F",
@@ -225,6 +271,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -246,6 +296,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": []
   },
   {
@@ -259,6 +313,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -281,6 +339,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": [
     "L224 for não entrou no loop",
     "L219 method nenhum entrou"
@@ -297,6 +359,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],

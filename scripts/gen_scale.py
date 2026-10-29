@@ -155,6 +155,8 @@ class Fn:
         self.decs = []
         self.calls = 0
         self.fall = 0
+        self.observed = []  # outcomes of each call
+        self.impossible = 0
 
     def emit(self, s):
         self.lines.append(s)
@@ -175,6 +177,7 @@ def leaf(fn, indent, suffix=';'):
 
     def run(env, fr):
         env['Result'] += k
+    run.node = ('leaf',)
     return run
 
 
@@ -199,11 +202,15 @@ def gen_stmt(fn, depth, indent):
 
         def run(env, fr):
             if d.eval(env, fr):
+                fr['outs'][d] = 'T'
                 for s in then:
                     s(env, fr)
-            elif has_else:
-                for s in els:
-                    s(env, fr)
+            else:
+                fr['outs'][d] = 'F'
+                if has_else:
+                    for s in els:
+                        s(env, fr)
+        run.node = ('if', d, then, els if has_else else [])
         return run
     if r < 0.65:  # case on (A + B) mod m
         m = rnd.randint(3, 6)
@@ -238,11 +245,16 @@ def gen_stmt(fn, depth, indent):
                 if sel in labs:
                     d.armhits[i] += 1
                     fr['entered'] = True
+                    fr['outs'][d] = i
                     body(env, fr)
                     return
             d.armhits[-1] += 1
+            fr['outs'][d] = len(arms)
             if has_else:
                 ebody(env, fr)
+        d.m = m
+        d.armsets = [labs for labs, _ in arms]
+        run.node = ('case', d)
         return run
     if r < 0.82:  # for loop
         m = rnd.randint(2, 5)
@@ -257,10 +269,14 @@ def gen_stmt(fn, depth, indent):
             if n >= 1:
                 d.t += 1  # entered
                 fr['entered'] = True
+                fr['outs'][d] = 'E'
                 for _ in range(n):
                     body(env, fr)
             else:
                 d.f += 1  # not entered
+                fr['outs'][d] = 'N'
+        d.m = m
+        run.node = ('loop', d)
         return run
     if r < 0.95:  # while loop
         k = rnd.randint(3, 15)
@@ -277,11 +293,222 @@ def gen_stmt(fn, depth, indent):
 
         def run(env, fr):
             env['V'] = env['A']
+            fr['outs'][d] = 'N'
             while d.eval(env, fr):
+                fr['outs'][d] = 'E'
                 env['V'] -= 4
                 env['Result'] += 1
+        run.node = ('loop', d)
         return run
     return leaf(fn, indent)
+
+
+# ---------- path combinations (combinação dos ifs) ----------
+# Independent of the Pascal analysis: structural paths come from the
+# generator's own statement tree, and impossible combinations are found by
+# brute force over the parameter values.
+MAX_PATHS = 4096
+RANGE_ABC = range(-70, 100)   # covers every region and residue of the facts
+RANGE_SEL = range(-10, 10)    # (A + B) mod m, an independent term per m
+
+
+def dmod(x, m):
+    """Delphi mod: the sign follows the dividend"""
+    return x - m * int(x / m)
+
+
+def seq_paths(nodes):
+    out = [[]]
+    for n in nodes:
+        alts = node_paths(n)
+        out = [a + b for a in out for b in alts]
+    return out
+
+
+def node_paths(n):
+    if n[0] == 'leaf':
+        return [[]]
+    if n[0] == 'if':
+        _, d, then, els = n
+        return [[(d, 'T')] + p for p in seq_paths([x.node for x in then])] + \
+               [[(d, 'F')] + p for p in seq_paths([x.node for x in els])]
+    if n[0] == 'case':
+        d = n[1]
+        return [[(d, i)] for i in range(len(d.arms))]
+    return [[(n[1], 'E')], [(n[1], 'N')]]
+
+
+def count_paths(nodes):
+    total = 1
+    for n in nodes:
+        total *= count_node(n)
+    return total
+
+
+def count_node(n):
+    if n[0] == 'leaf':
+        return 1
+    if n[0] == 'if':
+        return count_paths([x.node for x in n[2]]) + count_paths([x.node for x in n[3]])
+    if n[0] == 'case':
+        return len(n[1].arms)
+    return 2
+
+
+def proj_paths(nodes, keep):
+    """structural paths projected on the decisions in keep (deduplicated)"""
+    out = {()}
+    for n in nodes:
+        alts = proj_node(n, keep)
+        out = {a + b for a in out for b in alts}
+    return out
+
+
+def proj_node(n, keep):
+    if n[0] == 'leaf':
+        return {()}
+    d = n[1]
+    mine = lambda o: ((d, o),) if d in keep else ()
+    if n[0] == 'if':
+        return {mine('T') + p for p in proj_paths([x.node for x in n[2]], keep)} | \
+               {mine('F') + p for p in proj_paths([x.node for x in n[3]], keep)}
+    if n[0] == 'case':
+        return {mine(i) for i in range(len(d.arms))}
+    return {mine('E'), mine('N')}
+
+
+def tree_assignments(n, want):
+    """every truth assignment of the atoms of a condition giving want"""
+    ats = atoms(n, [])
+    for v in range(1 << len(ats)):
+        vals = {id(a): bool(v >> i & 1) for i, a in enumerate(ats)}
+
+        def ev(x):
+            if isinstance(x, Atom):
+                return vals[id(x)]
+            if x.op == 'not':
+                return not ev(x.kids[0])
+            if x.op == 'and':
+                return ev(x.kids[0]) and ev(x.kids[1])
+            return ev(x.kids[0]) or ev(x.kids[1])
+        if ev(n) == want:
+            yield [(a, vals[id(a)]) for a in ats]
+
+
+def facts_of(d, o):
+    """alternatives (lists of (variable, test, wanted)) for one outcome"""
+    if d.kind == 'if':
+        return [[(a.v, a, val) for a, val in alt] for alt in tree_assignments(d.cond, o == 'T')]
+    if d.kind == 'case':
+        if o < len(d.armsets):
+            return [[('S%d' % d.m, ('in', frozenset(d.armsets[o])), True)]]
+        allv = frozenset().union(*d.armsets)
+        return [[('S%d' % d.m, ('in', allv), False)]]
+    if d.kind == 'for':
+        return [[('C', ('modge1', d.m), o == 'E')]]
+    return [[]]  # while V > k: V is not a constant at the loop
+
+
+def test_holds(t, x):
+    if isinstance(t, Atom):
+        return {'>': x > t.k, '<=': x <= t.k, '=': x == t.k, '<>': x != t.k, 'odd': x % 2 != 0}[t.kind]
+    if t[0] == 'in':
+        return x in t[1]
+    return dmod(x, t[1]) >= 1
+
+
+_var_cache = {}
+
+
+def var_ok(var, tests):
+    key = (var, frozenset((id(t) if isinstance(t, Atom) else t, w) for t, w in tests))
+    r = _var_cache.get(key)
+    if r is None:
+        rng = RANGE_SEL if var.startswith('S') else RANGE_ABC
+        r = any(all(test_holds(t, x) == w for t, w in tests) for x in rng)
+        _var_cache[key] = r
+    return r
+
+
+def path_possible(path):
+    options = [facts_of(d, o) for d, o in path]
+
+    def rec(i, per_var):
+        if i == len(options):
+            return True
+        for alt in options[i]:
+            nv = {k: list(v) for k, v in per_var.items()}
+            ok = True
+            for var, t, w in alt:
+                nv.setdefault(var, []).append((t, w))
+            for var, t, w in alt:
+                if not var_ok(var, nv[var]):
+                    ok = False
+                    break
+            if ok and rec(i + 1, nv):
+                return True
+        return False
+    return rec(0, {})
+
+
+def outcome_text(d, o):
+    if d.kind == 'if':
+        return 'verdadeiro' if o == 'T' else 'falso'
+    if d.kind in ('for', 'while'):
+        return 'entrou' if o == 'E' else 'não entrou'
+    text, _, impl = d.arms[o]
+    if text == 'else':
+        return 'nenhum rótulo' if impl else 'else'
+    return 'rótulo ' + text
+
+
+def path_items(fn, base):
+    """([covered, total], uncovered tags) of the path combinations"""
+    decs = fn.decs
+    if len(decs) < 2:
+        return [0, 0], []
+    order = {d: i for i, d in enumerate(decs)}
+    nodes = [s.node for s in fn.body]
+    lineof = lambda d: base + d.line
+    label = lambda p: ' + '.join(f'{d.kind} L{lineof(d)} {outcome_text(d, o)}' for d, o in p)
+    if count_paths(nodes) <= MAX_PATHS:
+        paths = [sorted(p, key=lambda x: order[x[0]]) for p in seq_paths(nodes) if p]
+        seen, items = set(), []
+        for p in paths:
+            k = tuple(p)
+            if k not in seen:
+                seen.add(k)
+                items.append(p)
+        full = True
+    else:
+        items, full = [], False
+        for i in range(len(decs)):
+            for j in range(i + 1, len(decs)):
+                keep = {decs[i], decs[j]}
+                for p in proj_paths(nodes, keep):
+                    if len(p) == 2:
+                        items.append(sorted(p, key=lambda x: order[x[0]]))
+    cov = tot = 0
+    unc = []
+    for p in items:
+        if not path_possible(p):
+            fn.impossible += 1
+            continue
+        tot += 1
+        want = dict(p)
+        hit = False
+        for obs in fn.observed:
+            if full and obs == want:
+                hit = True
+            if not full and all(obs.get(d) == o for d, o in p):
+                hit = True
+            if hit:
+                break
+        if hit:
+            cov += 1
+        else:
+            unc.append(f'L{fn.base} caminho {label(p)}')
+    return [cov, tot], unc
 
 
 def item_tags(fn, base):
@@ -387,10 +614,11 @@ def main():
             for i in range(CASES):
                 a, b, c = rnd.randint(0, 25), rnd.randint(0, 25), rnd.randint(0, 25)
                 env = {'A': a, 'B': b, 'C': c, 'Result': 0, 'V': 0, 'I': 0}
-                fr = {'entered': False, 'evaluated': False}
+                fr = {'entered': False, 'evaluated': False, 'outs': {}}
                 fn.calls += 1
                 for s in fn.body:
                     s(env, fr)
+                fn.observed.append(dict(fr['outs']))
                 if fr['evaluated'] and not fr['entered']:
                     fn.fall += 1
                 t.append(f"    [TestCase('c{i}', '{a},{b},{c},{env['Result']}')]")
@@ -404,12 +632,15 @@ def main():
         for fn in fns:
             # decision lines are relative to the first body line
             if not fn.decs:
-                expected['methods'].append({'name': fn.name, 'branch': [0, 0], 'condition': [0, 0], 'combination': [0, 0], 'uncovered': []})
+                expected['methods'].append({'name': fn.name, 'branch': [0, 0], 'condition': [0, 0], 'combination': [0, 0],
+                                            'path': [0, 0], 'uncovered': []})
                 continue
             b, c, k, unc = item_tags(fn, fn.body_base)
             # method line is the header line
             unc = [x.replace(f'L{fn.body_base} method', f'L{fn.base} method') for x in unc]
-            expected['methods'].append({'name': fn.name, 'branch': b, 'condition': c, 'combination': k, 'uncovered': unc})
+            pth, punc = path_items(fn, fn.body_base)
+            expected['methods'].append({'name': fn.name, 'branch': b, 'condition': c, 'combination': k, 'path': pth,
+                                        'uncovered': unc + punc})
 
     dpr = ['program ScaleTests;', '', '{$APPTYPE CONSOLE}', '{$STRONGLINKTYPES ON}', '', 'uses', '  System.SysUtils,',
            '  DUnitX.TestFramework,', '  DUnitX.Loggers.Console,']
@@ -426,10 +657,12 @@ def main():
         fh.write('root=..\nsrc=src\n')
     with open(os.path.join(OUT, 'expected.json'), 'w', encoding='utf-8') as fh:
         json.dump(expected, fh, ensure_ascii=False, indent=1)
-    tot = [sum(m[k][1] for m in expected['methods']) for k in ('branch', 'condition', 'combination')]
-    cov = [sum(m[k][0] for m in expected['methods']) for k in ('branch', 'condition', 'combination')]
+    tot = [sum(m[k][1] for m in expected['methods']) for k in ('branch', 'condition', 'combination', 'path')]
+    cov = [sum(m[k][0] for m in expected['methods']) for k in ('branch', 'condition', 'combination', 'path')]
+    imp = sum(fn.impossible for _, fns in units for fn in fns)
     print(f'{len(expected["methods"])} methods, {len(expected["methods"]) * CASES} test cases; '
-          f'branch {cov[0]}/{tot[0]}, cond {cov[1]}/{tot[1]}, combo {cov[2]}/{tot[2]}')
+          f'branch {cov[0]}/{tot[0]}, cond {cov[1]}/{tot[1]}, combo {cov[2]}/{tot[2]}, '
+          f'path {cov[3]}/{tot[3]} ({imp} impossible)')
 
 
 main()

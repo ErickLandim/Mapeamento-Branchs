@@ -24,7 +24,7 @@ func (ps *Parser) fail(format string, a ...any) {
 	panic(&ParseError{Tok: ps.cur(), Msg: fmt.Sprintf(format, a...)})
 }
 
-func (ps *Parser) cur() Token         { return ps.toks[ps.p] }
+func (ps *Parser) cur() Token { return ps.toks[ps.p] }
 func (ps *Parser) peek(k int) Token {
 	if ps.p+k < len(ps.toks) {
 		return ps.toks[ps.p+k]
@@ -36,7 +36,13 @@ func (ps *Parser) isKw(s string) bool {
 	t := ps.cur()
 	return t.Kind == TKeyword && t.Low == s
 }
-func (ps *Parser) next() Token { t := ps.toks[ps.p]; if ps.p < len(ps.toks)-1 { ps.p++ }; return t }
+func (ps *Parser) next() Token {
+	t := ps.toks[ps.p]
+	if ps.p < len(ps.toks)-1 {
+		ps.p++
+	}
+	return t
+}
 func (ps *Parser) expect(s string) int {
 	if !ps.is(s) {
 		ps.fail("expected %q", s)
@@ -609,6 +615,7 @@ func (ps *Parser) parseTypeSection() {
 				e.Values = append(e.Values, v.Low)
 				if ps.accept("=") {
 					ps.parseExpr()
+					e.Explicit = true
 				}
 				ps.accept(",")
 			}

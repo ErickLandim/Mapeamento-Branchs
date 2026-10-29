@@ -15,6 +15,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": []
   },
   {
@@ -31,13 +35,26 @@
     8,
     10
    ],
+   "path": [
+    4,
+    13
+   ],
    "uncovered": [
     "L61 if Peso > FPesoMaximo = T",
     "L61 if (F,T) => T",
     "L68 if falso",
     "L78 if Regiao in [rgNorte, rgNordeste] = F",
     "L78 if (T,F,F) => F",
-    "L57 method nenhum entrou"
+    "L57 method nenhum entrou",
+    "L57 caminho if L61 falso + case L64 rótulo mdRodoviario + if L76 falso + if L78 verdadeiro",
+    "L57 caminho if L61 falso + case L64 rótulo mdRodoviario + if L76 verdadeiro + if L78 falso",
+    "L57 caminho if L61 falso + case L64 rótulo mdRodoviario + if L76 verdadeiro + if L78 verdadeiro",
+    "L57 caminho if L61 falso + case L64 rótulo mdAereo + if L68 falso + if L76 falso + if L78 falso",
+    "L57 caminho if L61 falso + case L64 rótulo mdAereo + if L68 falso + if L76 falso + if L78 verdadeiro",
+    "L57 caminho if L61 falso + case L64 rótulo mdAereo + if L68 verdadeiro + if L76 falso + if L78 falso",
+    "L57 caminho if L61 falso + case L64 else + if L76 falso + if L78 falso",
+    "L57 caminho if L61 falso + case L64 else + if L76 falso + if L78 verdadeiro",
+    "L57 caminho if L61 falso + case L64 else + if L76 verdadeiro + if L78 falso"
    ]
   },
   {
@@ -54,11 +71,22 @@
     0,
     0
    ],
+   "path": [
+    2,
+    9
+   ],
    "uncovered": [
     "L88 case rótulo rgCentroOeste",
     "L96 case else implícito (nenhum rótulo)",
     "L93 if falso",
-    "L82 method nenhum entrou"
+    "L82 method nenhum entrou",
+    "L82 caminho case L85 rótulo rgSul, rgSudeste + if L97 falso",
+    "L82 caminho case L85 rótulo rgCentroOeste + if L97 falso",
+    "L82 caminho case L85 rótulo rgCentroOeste + if L97 verdadeiro",
+    "L82 caminho case L85 rótulo rgNorte, rgNordeste + if L93 falso + if L97 falso",
+    "L82 caminho case L85 rótulo rgNorte, rgNordeste + if L93 falso + if L97 verdadeiro",
+    "L82 caminho case L85 nenhum rótulo + if L97 falso",
+    "L82 caminho case L85 nenhum rótulo + if L97 verdadeiro"
    ]
   },
   {
@@ -74,6 +102,10 @@
    "combination": [
     2,
     3
+   ],
+   "path": [
+    0,
+    0
    ],
    "uncovered": [
     "L106 for não entrou no loop",
@@ -96,8 +128,13 @@
     0,
     0
    ],
+   "path": [
+    3,
+    4
+   ],
    "uncovered": [
-    "L118 if verdadeiro"
+    "L118 if verdadeiro",
+    "L114 caminho if L116 falso + if L118 verdadeiro"
    ]
   },
   {
@@ -113,6 +150,10 @@
    "combination": [
     4,
     7
+   ],
+   "path": [
+    0,
+    0
    ],
    "uncovered": [
     "L129 if (T,-,T,-) => F",
@@ -131,6 +172,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -153,6 +198,10 @@
     0,
     0
    ],
+   "path": [
+    0,
+    0
+   ],
    "uncovered": [
     "L143 method nenhum entrou"
    ]
@@ -168,6 +217,10 @@
     0
    ],
    "combination": [
+    0,
+    0
+   ],
+   "path": [
     0,
     0
    ],
@@ -187,9 +240,19 @@
     0,
     0
    ],
+   "path": [
+    2,
+    8
+   ],
    "uncovered": [
     "L181 if verdadeiro",
-    "L176 method nenhum entrou"
+    "L176 method nenhum entrou",
+    "L176 caminho if L179 falso + if L181 falso + if L183 verdadeiro + if L185 falso",
+    "L176 caminho if L179 falso + if L181 verdadeiro + if L183 falso + if L185 falso",
+    "L176 caminho if L179 falso + if L181 verdadeiro + if L183 verdadeiro + if L185 falso",
+    "L176 caminho if L179 verdadeiro + if L181 falso + if L183 falso + if L185 falso",
+    "L176 caminho if L179 verdadeiro + if L181 verdadeiro + if L183 falso + if L185 falso",
+    "L176 caminho if L179 verdadeiro + if L181 verdadeiro + if L183 verdadeiro + if L185 falso"
    ]
   }
  ]

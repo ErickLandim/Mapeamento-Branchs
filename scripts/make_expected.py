@@ -14,6 +14,7 @@ for m in rep["methods"]:
         "branch": [s["branch"]["covered"], s["branch"]["total"]],
         "condition": [s["condition"]["covered"], s["condition"]["total"]],
         "combination": [s["combination"]["covered"], s["combination"]["total"]],
+        "path": [s["path"]["covered"], s["path"]["total"]],
         "uncovered": [f'L{i["line"]} {i["kind"]} {i["label"]}' for i in m["items"] if not i["covered"]],
     })
 json.dump(out, open(sys.argv[2], "w", encoding="utf-8"), ensure_ascii=False, indent=1)

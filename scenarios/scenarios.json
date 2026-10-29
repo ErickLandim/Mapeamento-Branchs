@@ -53,6 +53,19 @@
    "projects": [
     "tests/ScaleTests.dproj@Win64"
    ]
+  },
+  {
+   "name": "s05-caminhos",
+   "root": "scenarios/s05-caminhos",
+   "src": [
+    "src"
+   ],
+   "tests": [
+    "tests"
+   ],
+   "projects": [
+    "tests/S05Tests.dproj@Win64"
+   ]
   }
  ]
 }

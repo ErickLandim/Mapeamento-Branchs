@@ -4,6 +4,8 @@
 # delphi:  real coverage - instruments the sources, compiles the test projects
 #          with dcc32/dcc64 (no msbuild, no IDE), runs them and merges the hits.
 #          Needs a Windows runner with Delphi 11+ installed (tag: delphi).
+#          The hits then go through bcovscan (built by the static job) for the
+#          combinations between ifs and the simple summary (resumo.html).
 
 stages:
   - coverage
@@ -15,7 +17,7 @@ static-branch-coverage:
   stage: coverage
   image: golang:1.22
   script:
-    - cd tools/bcovscan && go build -o bcovscan . && cd ../..
+    - cd tools/bcovscan && go build -o bcovscan . && GOOS=windows GOARCH=amd64 go build -o bcovscan.exe . && cd ../..
     - apt-get update -qq && apt-get install -y -qq python3 >/dev/null
     - python3 scripts/validate.py
     - tools/bcovscan/bcovscan scan --root . --src samples/src --tests samples/tests/dunitx --tests samples/tests/dunit --out .bcov/samples
@@ -24,6 +26,7 @@ static-branch-coverage:
     when: always
     paths:
       - .bcov/
+      - tools/bcovscan/bcovscan.exe
     reports:
       coverage_report:
         coverage_format: cobertura
@@ -34,14 +37,18 @@ delphi-branch-coverage:
   tags: [windows, delphi]
   rules:
     - if: $DELPHI_RUNNER == "1"
+  needs: [static-branch-coverage]
   variables:
     BDS_VERSION: "22.0"   # Delphi 11 Alexandria; 37.0 = RAD Studio 13
   script:
     - $env:BDS = "C:\Program Files (x86)\Embarcadero\Studio\$env:BDS_VERSION"
     - '& "$env:BDS\bin\dcc32.exe" -B -Q -NSSystem;Winapi;System.Win -E"bcov\bin" -NU"bcov\bin\dcu" -U"$env:BDS\lib\win32\release" bcov\cli\bcov.dpr'
     - '.\bcov\bin\bcov.exe run --builder dcc --root . --src samples\src --project samples\tests\dunitx\SampleTestsDUnitX.dproj@Win64 --project samples\tests\dunit\SampleTestsDUnit.dproj@Win32 --out .bcov\delphi'
+    - $hits = Get-ChildItem .bcov\delphi\*.bcovhits.json | ForEach-Object { "--hits"; $_.FullName }
+    - '& .\tools\bcovscan\bcovscan.exe report --root . --src samples\src @hits --out .bcov\delphi\report-full'
   coverage: '/Branch coverage : \d+\/\d+ \((\d+\.\d+)%\)/'
   artifacts:
     when: always
     paths:
       - .bcov/delphi/report/
+      - .bcov/delphi/report-full/

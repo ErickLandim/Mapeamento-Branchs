@@ -12,7 +12,8 @@ import (
 // expected.json:
 //
 //	{"methods": [{"name": "calcular", "branch": [3, 5], "condition": [0, 0],
-//	  "combination": [0, 0], "uncovered": ["L16 if falso", "L12 method nenhum entrou"]}]}
+//	  "combination": [0, 0], "path": [2, 3], "uncovered": ["L16 if falso", "L12 method nenhum entrou",
+//	  "L12 caminho if L16 falso + if L19 falso"]}]}
 //
 // "uncovered", when present, must match the uncovered items exactly.
 type expected struct {
@@ -21,6 +22,7 @@ type expected struct {
 		Branch      *[2]int   `json:"branch"`
 		Condition   *[2]int   `json:"condition"`
 		Combination *[2]int   `json:"combination"`
+		Path        *[2]int   `json:"path"`
 		Uncovered   *[]string `json:"uncovered"`
 	} `json:"methods"`
 }
@@ -61,6 +63,7 @@ func cmdCheck(args []string) error {
 		ratio(em.Name, "branch", em.Branch, m.Summary.Branch)
 		ratio(em.Name, "condition", em.Condition, m.Summary.Cond)
 		ratio(em.Name, "combination", em.Combination, m.Summary.Combo)
+		ratio(em.Name, "path", em.Path, m.Summary.Path)
 		if em.Uncovered != nil {
 			want := map[string]bool{}
 			for _, u := range *em.Uncovered {
@@ -68,6 +71,11 @@ func cmdCheck(args []string) error {
 			}
 			got := map[string]bool{}
 			for _, it := range m.Items {
+				// expectations written before path combinations existed
+				// do not list them
+				if it.Category == cov.CatPath && em.Path == nil {
+					continue
+				}
 				if !it.Covered {
 					got[itemTag(it)] = true
 				}

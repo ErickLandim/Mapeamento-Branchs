@@ -140,6 +140,9 @@ func writeOutputs(rep *cov.Report, m *cov.Map, outDir string, detail bool, minBr
 	if err := cov.WriteCobertura(filepath.Join(outDir, "cobertura.xml"), rep); err != nil {
 		return err
 	}
+	if err := cov.WriteResumo(filepath.Join(outDir, "resumo.html"), rep, m); err != nil {
+		return err
+	}
 	f, err := os.Create(filepath.Join(outDir, "coverage.txt"))
 	if err != nil {
 		return err
@@ -156,14 +159,28 @@ func writeOutputs(rep *cov.Report, m *cov.Map, outDir string, detail bool, minBr
 func cmdReport(args []string) error {
 	fl := flag.NewFlagSet("report", flag.ExitOnError)
 	mapPath := fl.String("map", "", "bcov.map.json")
+	root := fl.String("root", ".", "repository root (with --src)")
 	out := fl.String("out", ".bcov/report", "output dir")
 	detail := fl.Bool("detail", false, "print every item")
 	minBranch := fl.Float64("min-branch", 0, "fail below this branch percentage")
-	var hits multiFlag
+	var hits, src multiFlag
 	fl.Var(&hits, "hits", "hits file (repeatable)")
+	fl.Var(&src, "src", "production sources: rebuild the map from them (adds path combinations)")
 	fl.Parse(args)
 	var m cov.Map
-	if err := cov.ReadJSON(*mapPath, &m); err != nil {
+	if len(src) > 0 {
+		// same numbering as the Delphi instrumenter, plus the path analysis
+		r := absRoot(*root)
+		files, err := collectPas(r, src)
+		if err != nil {
+			return err
+		}
+		units, err := parseFiles(files)
+		if err != nil {
+			return err
+		}
+		m = *cov.BuildMap(pascal.Analyze(units), r)
+	} else if err := cov.ReadJSON(*mapPath, &m); err != nil {
 		return err
 	}
 	var all []*cov.Hits

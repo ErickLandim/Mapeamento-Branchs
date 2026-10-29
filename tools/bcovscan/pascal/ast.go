@@ -113,14 +113,14 @@ type (
 	}
 	Case struct {
 		Span
-		Sel        Expr
-		Arms       []*CaseArm
-		HasElse    bool
-		ElseTok    int
-		Else       []Stmt
-		EndTok     int
-		ElseProbe  int
-		Dec        *Decision
+		Sel       Expr
+		Arms      []*CaseArm
+		HasElse   bool
+		ElseTok   int
+		Else      []Stmt
+		EndTok    int
+		ElseProbe int
+		Dec       *Decision
 	}
 	While struct {
 		Span
@@ -136,13 +136,13 @@ type (
 	}
 	For struct {
 		Span
-		Var      Expr
-		From, To Expr // From=nil for for-in
-		In       Expr
-		Down     bool
-		Body     Stmt
-		DoTok    int
-		Dec      *Decision
+		Var       Expr
+		From, To  Expr // From=nil for for-in
+		In        Expr
+		Down      bool
+		Body      Stmt
+		DoTok     int
+		Dec       *Decision
 		InlineVar bool
 	}
 	With struct {
@@ -175,7 +175,7 @@ type (
 		Type  string
 		Init  Expr
 	}
-	Goto struct{ Span }
+	Goto    struct{ Span }
 	AsmStmt struct{ Span }
 )
 
@@ -217,8 +217,9 @@ type Routine struct {
 }
 
 type EnumType struct {
-	Name   string
-	Values []string
+	Name     string
+	Values   []string
+	Explicit bool // some value has an explicit ordinal (a = 5)
 }
 
 type FieldDecl struct {
@@ -230,10 +231,10 @@ type MethodDecl struct {
 	Name       string
 	Visibility string // private, protected, public, published or "" (default section)
 	NParams    int
-	Kind      string
-	IsVirtual bool
-	IsClass   bool
-	Abstract  bool
+	Kind       string
+	IsVirtual  bool
+	IsClass    bool
+	Abstract   bool
 }
 
 type PropDecl struct {
@@ -266,19 +267,19 @@ type ConstDecl struct {
 }
 
 type Unit struct {
-	Name     string
-	Path     string
-	Src      string
-	Toks     []Token
-	Uses     []string
-	Enums    []*EnumType
-	Classes  []*ClassType
-	Consts   []ConstDecl
-	Vars     []VarDecl
-	Routines []*Routine // implementation routines (incl. methods), top level
-	ImplTok  int        // index of "implementation" token, -1 for programs
-	ImplUses Span       // span of implementation uses clause (First=-1 if none)
+	Name      string
+	Path      string
+	Src       string
+	Toks      []Token
+	Uses      []string
+	Enums     []*EnumType
+	Classes   []*ClassType
+	Consts    []ConstDecl
+	Vars      []VarDecl
+	Routines  []*Routine // implementation routines (incl. methods), top level
+	ImplTok   int        // index of "implementation" token, -1 for programs
+	ImplUses  Span       // span of implementation uses clause (First=-1 if none)
 	IsProgram bool
-	ProgUses Span
-	Init     []Stmt
+	ProgUses  Span
+	Init      []Stmt
 }

@@ -1,0 +1,255 @@
+{
+ "description": "Caminhos entre ifs com combinações impossíveis (Exit, finally, case + if, string constante, Double, Odd/mod, parâmetro reatribuído). Valores calculados à mão.",
+ "methods": [
+  {
+   "name": "Sinal",
+   "branch": [
+    5,
+    7
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    2,
+    3
+   ],
+   "uncovered": [
+    "L23 if verdadeiro",
+    "L18 method nenhum entrou",
+    "L18 caminho if L21 falso + if L23 verdadeiro + if L25 falso"
+   ]
+  },
+  {
+   "name": "Saudacao",
+   "branch": [
+    4,
+    6
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    2,
+    4
+   ],
+   "uncovered": [
+    "L33 case rótulo 12..17",
+    "L29 method nenhum entrou",
+    "L29 caminho case L31 rótulo 12..17 + if L37 falso",
+    "L29 caminho case L31 else + if L37 falso"
+   ]
+  },
+  {
+   "name": "PrimeiroAcima",
+   "branch": [
+    5,
+    7
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    2,
+    5
+   ],
+   "uncovered": [
+    "L49 if falso",
+    "L41 method nenhum entrou",
+    "L41 caminho for L46 entrou + if L49 falso",
+    "L41 caminho for L46 entrou + if L49 verdadeiro",
+    "L41 caminho for L46 não entrou + if L49 falso"
+   ]
+  },
+  {
+   "name": "ComFinally",
+   "branch": [
+    5,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    2,
+    3
+   ],
+   "uncovered": [
+    "L53 caminho if L57 falso + if L61 verdadeiro"
+   ]
+  },
+  {
+   "name": "Junta",
+   "branch": [
+    7,
+    7
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    2,
+    4
+   ],
+   "uncovered": [
+    "L66 caminho if L69 falso + if L71 verdadeiro + if L73 falso",
+    "L66 caminho if L69 verdadeiro + if L71 falso + if L73 falso"
+   ]
+  },
+  {
+   "name": "MesmaCondicao",
+   "branch": [
+    2,
+    5
+   ],
+   "condition": [
+    2,
+    4
+   ],
+   "combination": [
+    1,
+    3
+   ],
+   "path": [
+    1,
+    3
+   ],
+   "uncovered": [
+    "L80 if falso",
+    "L80 if Ativo = F",
+    "L80 if N > 3 = F",
+    "L80 if (F,-) => F",
+    "L80 if (T,F) => F",
+    "L82 if verdadeiro",
+    "L77 method nenhum entrou",
+    "L77 caminho if L80 falso + if L82 falso",
+    "L77 caminho if L80 falso + if L82 verdadeiro"
+   ]
+  },
+  {
+   "name": "Fracao",
+   "branch": [
+    3,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    2,
+    3
+   ],
+   "uncovered": [
+    "L89 if falso",
+    "L86 method nenhum entrou",
+    "L86 caminho if L89 falso + if L91 verdadeiro"
+   ]
+  },
+  {
+   "name": "ParImpar",
+   "branch": [
+    2,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    1,
+    2
+   ],
+   "uncovered": [
+    "L98 if falso",
+    "L100 if verdadeiro",
+    "L95 method nenhum entrou",
+    "L95 caminho if L98 falso + if L100 verdadeiro"
+   ]
+  },
+  {
+   "name": "Reatribui",
+   "branch": [
+    2,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    1,
+    2
+   ],
+   "uncovered": [
+    "L107 if falso",
+    "L109 if verdadeiro",
+    "L104 method nenhum entrou",
+    "L104 caminho if L107 falso + if L109 falso"
+   ]
+  },
+  {
+   "name": "Faixas",
+   "branch": [
+    6,
+    9
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "path": [
+    3,
+    5
+   ],
+   "uncovered": [
+    "L119 case rótulo 0..4",
+    "L120 case rótulo 5, 6",
+    "L113 method nenhum entrou",
+    "L113 caminho if L116 falso + case L118 rótulo 0..4 + if L125 falso",
+    "L113 caminho if L116 falso + case L118 rótulo 5, 6 + if L125 falso"
+   ]
+  }
+ ]
+}
