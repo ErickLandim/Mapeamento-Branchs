@@ -1,0 +1,196 @@
+{
+ "description": "s03: classe com interface fake (Setup/TearDown), setter de property, case com if dentro, and/or/not com 4 condições, for sobre enum, Exit dentro de loop, while com if/else if, try/except com EConvertError, TestCase com Double/Char/string. Conferido à mão.",
+ "methods": [
+  {
+   "name": "TCalculadoraFrete.SetPesoMaximo",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": []
+  },
+  {
+   "name": "TCalculadoraFrete.Calcular",
+   "branch": [
+    10,
+    12
+   ],
+   "condition": [
+    12,
+    14
+   ],
+   "combination": [
+    8,
+    10
+   ],
+   "uncovered": [
+    "L61 if Peso > FPesoMaximo = T",
+    "L61 if (F,T) => T",
+    "L68 if falso",
+    "L78 if Regiao in [rgNorte, rgNordeste] = F",
+    "L78 if (T,F,F) => F",
+    "L57 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "TCalculadoraFrete.Prazo",
+   "branch": [
+    5,
+    9
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L88 case rótulo rgCentroOeste",
+    "L96 case else implícito (nenhum rótulo)",
+    "L93 if falso",
+    "L82 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "TCalculadoraFrete.RegioesAtendidas",
+   "branch": [
+    3,
+    5
+   ],
+   "condition": [
+    3,
+    4
+   ],
+   "combination": [
+    2,
+    3
+   ],
+   "uncovered": [
+    "L106 for não entrou no loop",
+    "L108 if Modal = mdMaritimo = F",
+    "L108 if (F,-) => F",
+    "L101 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Classe",
+   "branch": [
+    6,
+    7
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L118 if verdadeiro"
+   ]
+  },
+  {
+   "name": "Elegivel",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    8,
+    8
+   ],
+   "combination": [
+    4,
+    7
+   ],
+   "uncovered": [
+    "L129 if (T,-,T,-) => F",
+    "L129 if (F,T,F,F) => T",
+    "L129 if (F,T,F,T) => F"
+   ]
+  },
+  {
+   "name": "PrimeiraVogal",
+   "branch": [
+    3,
+    5
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L137 for não entrou no loop",
+    "L133 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "ContaPalavras",
+   "branch": [
+    6,
+    7
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L143 method nenhum entrou"
+   ]
+  },
+  {
+   "name": "Parse",
+   "branch": [
+    3,
+    3
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": []
+  },
+  {
+   "name": "Combina",
+   "branch": [
+    7,
+    9
+   ],
+   "condition": [
+    0,
+    0
+   ],
+   "combination": [
+    0,
+    0
+   ],
+   "uncovered": [
+    "L181 if verdadeiro",
+    "L176 method nenhum entrou"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,47 @@
+# Branch coverage for Delphi (BCov)
+#
+# static:  compiler-free coverage (bcovscan, Go) - runs on any runner, seconds.
+# delphi:  real coverage - instruments the sources, compiles the test projects
+#          with dcc32/dcc64 (no msbuild, no IDE), runs them and merges the hits.
+#          Needs a Windows runner with Delphi 11+ installed (tag: delphi).
+
+stages:
+  - coverage
+
+variables:
+  GIT_DEPTH: "1"
+
+static-branch-coverage:
+  stage: coverage
+  image: golang:1.22
+  script:
+    - cd tools/bcovscan && go build -o bcovscan . && cd ../..
+    - apt-get update -qq && apt-get install -y -qq python3 >/dev/null
+    - python3 scripts/validate.py
+    - tools/bcovscan/bcovscan scan --root . --src samples/src --tests samples/tests/dunitx --tests samples/tests/dunit --out .bcov/samples
+  coverage: '/Branch coverage : \d+\/\d+ \((\d+\.\d+)%\)/'
+  artifacts:
+    when: always
+    paths:
+      - .bcov/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: .bcov/samples/cobertura.xml
+
+delphi-branch-coverage:
+  stage: coverage
+  tags: [windows, delphi]
+  rules:
+    - if: $DELPHI_RUNNER == "1"
+  variables:
+    BDS_VERSION: "22.0"   # Delphi 11 Alexandria; 37.0 = RAD Studio 13
+  script:
+    - $env:BDS = "C:\Program Files (x86)\Embarcadero\Studio\$env:BDS_VERSION"
+    - '& "$env:BDS\bin\dcc32.exe" -B -Q -NSSystem;Winapi;System.Win -E"bcov\bin" -NU"bcov\bin\dcu" -U"$env:BDS\lib\win32\release" bcov\cli\bcov.dpr'
+    - '.\bcov\bin\bcov.exe run --builder dcc --root . --src samples\src --project samples\tests\dunitx\SampleTestsDUnitX.dproj@Win64 --project samples\tests\dunit\SampleTestsDUnit.dproj@Win32 --out .bcov\delphi'
+  coverage: '/Branch coverage : \d+\/\d+ \((\d+\.\d+)%\)/'
+  artifacts:
+    when: always
+    paths:
+      - .bcov/delphi/report/

@@ -47,6 +47,9 @@ function AgentBuild(const AProject, APlatform, AConfig: string; ATimeoutSec: Int
 procedure AgentLog(const ALines: TArray<string>);
 
 function RunProcess(const AExe, AParams, AWorkDir: string; const AEnv: TArray<string>): Cardinal;
+/// Builds with the command-line compiler (dcc32/dcc64), for licensed
+/// installations / CI runners. No msbuild and no IDE needed.
+function DccBuild(const AProject, APlatform, AConfig: string): TBuildResult;
 function ProjectExe(const AProject, APlatform, AConfig: string): string;
 
 implementation
@@ -457,6 +460,34 @@ begin
     CloseHandle(PI.hProcess);
     CloseHandle(PI.hThread);
   end;
+end;
+
+function DccBuild(const AProject, APlatform, AConfig: string): TBuildResult;
+var
+  Bds, Dcc, Dir, OutDir, Lib, Params: string;
+  Code: Cardinal;
+begin
+  Bds := GetEnvironmentVariable('BDS');
+  if Bds = '' then
+    raise Exception.Create('BDS not set: run rsvars.bat of the Delphi installation first');
+  if SameText(APlatform, 'Win64') then
+    Dcc := TPath.Combine(Bds, 'bin\dcc64.exe')
+  else
+    Dcc := TPath.Combine(Bds, 'bin\dcc32.exe');
+  Dir := ExtractFileDir(AProject);
+  OutDir := TPath.Combine(Dir, APlatform + PathDelim + AConfig);
+  ForceDirectories(TPath.Combine(OutDir, 'dcu'));
+  Lib := TPath.Combine(Bds, 'lib' + PathDelim + LowerCase(APlatform) + PathDelim + 'release');
+  Params := Format('-B -Q -$O- -DDEBUG;BCOV -NSSystem;Winapi;System.Win;Data;Xml;Vcl -E"%s" -NU"%s" -U"%s" -I"%s" "%s"',
+    [OutDir, TPath.Combine(OutDir, 'dcu'), Lib, Lib, ChangeFileExt(AProject, '.dpr')]);
+  Code := RunProcess(Dcc, Params, Dir, []);
+  Result.Ok := Code = 0;
+  if Result.Ok then
+    Result.Status := 'ok'
+  else
+    Result.Status := 'failed';
+  Result.Messages := Format('%s %s (exit %d)', [ExtractFileName(Dcc), Params, Code]);
+  Result.Raw := Result.Messages;
 end;
 
 function ProjectExe(const AProject, APlatform, AConfig: string): string;

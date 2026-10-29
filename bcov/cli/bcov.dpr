@@ -6,6 +6,7 @@
   bcov prepare    --root R --src DIR --project P.dproj [--project ...] --out OUT
   bcov build      --project P.dproj [--platform Win32] [--config Debug]
   bcov run        --project P.dproj[@Win64] [--project ...] [--root R] [--src DIR] [--out OUT] [--ide] [--min-branch N]
+                  [--builder ide|dcc]   ide = IDE agent (Community), dcc = dcc32/dcc64 (CI)
   bcov report     --map bcov.map.json --hits H [--hits H2] --out DIR [--detail]
 
   "run" = prepare (instrumented mirror) + build through the IDE agent + run
@@ -112,7 +113,7 @@ begin
   Writeln('  bcov instrument --root R --src DIR [--src DIR] --out OUT');
   Writeln('  bcov prepare    --root R --src DIR --project P.dproj --out OUT');
   Writeln('  bcov build      --project P.dproj [--platform Win32] [--config Debug]');
-  Writeln('  bcov run        --project P.dproj[@Win64] [--root R] [--src DIR] [--out OUT] [--ide] [--min-branch N]');
+  Writeln('  bcov run        --project P.dproj[@Win64] [--root R] [--src DIR] [--out OUT] [--ide] [--min-branch N] [--builder ide|dcc]');
   Writeln('  bcov report     --map M --hits H [--hits H2] --out DIR [--detail]');
   Halt(2);
 end;
@@ -295,8 +296,11 @@ begin
       Exit;
     for I := 0 to Mirrors.Count - 1 do
     begin
-      Writeln('[bcov] build (IDE agent) ', Mirrors[I], ' [', Platforms[I], '/', Config, ']');
-      B := AgentBuild(Mirrors[I], Platforms[I], Config, StrToIntDef(Args.Get('timeout'), 900));
+      Writeln('[bcov] build (', Args.Get('builder', 'ide'), ') ', Mirrors[I], ' [', Platforms[I], '/', Config, ']');
+      if SameText(Args.Get('builder', 'ide'), 'dcc') then
+        B := DccBuild(Mirrors[I], Platforms[I], Config)
+      else
+        B := AgentBuild(Mirrors[I], Platforms[I], Config, StrToIntDef(Args.Get('timeout'), 900));
       if not B.Ok then
       begin
         Writeln('[bcov] build failed:');
