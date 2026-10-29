@@ -40,6 +40,19 @@
    "projects": [
     "tests/S03Tests.dproj@Win64"
    ]
+  },
+  {
+   "name": "s04-escala-gerada",
+   "root": "scenarios/s04-escala-gerada",
+   "src": [
+    "src"
+   ],
+   "tests": [
+    "tests"
+   ],
+   "projects": [
+    "tests/ScaleTests.dproj@Win64"
+   ]
   }
  ]
 }
