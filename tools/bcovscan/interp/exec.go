@@ -125,6 +125,9 @@ func (e *Evaluator) invokeIn(r *pascal.Routine, self *Object, cls *ClassInfo, ca
 	c.instr = e.prod[u] && len(r.Decisions) > 0
 	if c.instr {
 		e.rec.enter(r.ID)
+		if e.curRun != nil {
+			e.curRun.AddCall(r.ID, e.curFile, e.curLine)
+		}
 	}
 	func() {
 		defer func() {
@@ -237,6 +240,11 @@ func (e *Evaluator) exec(c *ctx, s pascal.Stmt) {
 		return
 	}
 	e.step()
+	if e.curRun != nil && c.u != nil && !e.prod[c.u] {
+		if f := s.Sp().First; f >= 0 && f < len(c.u.Toks) {
+			e.curFile, e.curLine = c.u.Path, c.u.Toks[f].Line
+		}
+	}
 	switch s := s.(type) {
 	case *pascal.Compound:
 		e.execList(c, s.Stmts)

@@ -344,6 +344,12 @@ type Evaluator struct {
 	depth    int
 	steps    int
 	nextObj  int
+	// per-test traceability: the run being executed and the test-source
+	// statement that is executing (where production calls originate)
+	Runs    []*cov.TestRun
+	curRun  *cov.TestRun
+	curFile string
+	curLine int
 }
 
 type Env struct {
@@ -642,7 +648,20 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 	}
 	cases := e.discover(tests)
 	fixtures := map[*ClassInfo]*Object{}
+	var all []*cov.Hits
 	for _, tc := range cases {
+		// every test records into its own recorder so each coverage item can
+		// be traced back to the tests that exercised it
+		e.rec = newRecorder()
+		run := &cov.TestRun{Name: tc.name}
+		if u := e.unitOf(tc.method); u != nil {
+			run.Unit, run.File = u.Name, u.Path
+			run.Line, run.EndLine = tc.method.Line, tc.method.Line
+			if tc.method.EndTok >= 0 && tc.method.EndTok < len(u.Toks) {
+				run.EndLine = u.Toks[tc.method.EndTok].Line
+			}
+		}
+		e.curRun, e.curFile, e.curLine = run, run.File, run.Line
 		var self *Object
 		if tc.dunit {
 			self = e.newObject(tc.class)
@@ -660,14 +679,17 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 		var args []Value
 		if tc.args != nil {
 			args = e.testCaseArgs(tc)
-			label += fmt.Sprintf("(%s)", e.caseName(tc))
+			run.Case = e.caseName(tc)
+			label += fmt.Sprintf("(%s)", run.Case)
 		}
+		e.curFile, e.curLine = run.File, run.Line
 		status := e.runSafe(func() {
 			for _, s := range tc.setup {
 				if s != nil {
 					e.invoke(s, self, tc.class, nil, nil, nil)
 				}
 			}
+			e.curFile, e.curLine = run.File, run.Line
 			e.invoke(tc.method, self, tc.class, nil, args, nil)
 			for _, s := range tc.teardown {
 				if s != nil {
@@ -675,12 +697,18 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 				}
 			}
 		})
+		run.Hits = e.rec.hits()
+		e.curRun = nil
+		e.Runs = append(e.Runs, run)
+		all = append(all, run.Hits)
 		e.logf("test %s: %s", label, status)
 	}
 	if len(cases) == 0 {
 		e.logf("WARN no tests found (DUnitX [Test]/[TestCase] methods or DUnit TTestCase descendants)")
 	}
-	return e.rec.hits(), e.log
+	h := cov.Merge(all)
+	h.Source = "bcovscan-static"
+	return h, e.log
 }
 
 func (e *Evaluator) caseName(tc testCase) string {

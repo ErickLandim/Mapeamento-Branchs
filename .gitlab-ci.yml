@@ -45,7 +45,7 @@ delphi-branch-coverage:
     - '& "$env:BDS\bin\dcc32.exe" -B -Q -NSSystem;Winapi;System.Win -E"bcov\bin" -NU"bcov\bin\dcu" -U"$env:BDS\lib\win32\release" bcov\cli\bcov.dpr'
     - '.\bcov\bin\bcov.exe run --builder dcc --root . --src samples\src --project samples\tests\dunitx\SampleTestsDUnitX.dproj@Win64 --project samples\tests\dunit\SampleTestsDUnit.dproj@Win32 --out .bcov\delphi'
     - $hits = Get-ChildItem .bcov\delphi\*.bcovhits.json | ForEach-Object { "--hits"; $_.FullName }
-    - '& .\tools\bcovscan\bcovscan.exe report --root . --src samples\src @hits --out .bcov\delphi\report-full'
+    - '& .\tools\bcovscan\bcovscan.exe report --root . --src samples\src --tests samples\tests\dunitx --tests samples\tests\dunit @hits --out .bcov\delphi\report-full'
   coverage: '/Branch coverage : \d+\/\d+ \((\d+\.\d+)%\)/'
   artifacts:
     when: always

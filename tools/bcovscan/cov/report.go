@@ -114,7 +114,7 @@ type Report struct {
 
 // Merge sums several hits files.
 func Merge(all []*Hits) *Hits {
-	out := &Hits{Version: 1}
+	out := &Hits{Version: 1, Dec: [][3]int64{}, Cond: [][3]int64{}, Combo: [][4]int64{}, Hit: [][2]int64{}, For: [][3]int64{}, Meth: [][3]int64{}, Path: []PathRow{}}
 	dec := map[int64][2]int64{}
 	cond := map[int64][2]int64{}
 	combo := map[[3]int64]int64{}
@@ -176,6 +176,27 @@ func Merge(all []*Hits) *Hits {
 	for _, v := range path {
 		out.Path = append(out.Path, v)
 	}
+	// deterministic output
+	sort.Slice(out.Dec, func(i, j int) bool { return out.Dec[i][0] < out.Dec[j][0] })
+	sort.Slice(out.Cond, func(i, j int) bool { return out.Cond[i][0] < out.Cond[j][0] })
+	sort.Slice(out.Hit, func(i, j int) bool { return out.Hit[i][0] < out.Hit[j][0] })
+	sort.Slice(out.For, func(i, j int) bool { return out.For[i][0] < out.For[j][0] })
+	sort.Slice(out.Meth, func(i, j int) bool { return out.Meth[i][0] < out.Meth[j][0] })
+	sort.Slice(out.Combo, func(i, j int) bool {
+		a, b := out.Combo[i], out.Combo[j]
+		for x := 0; x < 3; x++ {
+			if a[x] != b[x] {
+				return a[x] < b[x]
+			}
+		}
+		return false
+	})
+	sort.Slice(out.Path, func(i, j int) bool {
+		if out.Path[i].Method != out.Path[j].Method {
+			return out.Path[i].Method < out.Path[j].Method
+		}
+		return out.Path[i].Sig < out.Path[j].Sig
+	})
 	return out
 }
 

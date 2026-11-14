@@ -163,14 +163,17 @@ func cmdReport(args []string) error {
 	out := fl.String("out", ".bcov/report", "output dir")
 	detail := fl.Bool("detail", false, "print every item")
 	minBranch := fl.Float64("min-branch", 0, "fail below this branch percentage")
-	var hits, src multiFlag
+	var hits, src, tests multiFlag
+	fl.Var(&tests, "tests", "test sources (with --src): the static interpreter only links each line to the tests that ran it, the numbers stay those of --hits")
 	fl.Var(&hits, "hits", "hits file (repeatable)")
 	fl.Var(&src, "src", "production sources: rebuild the map from them (adds path combinations)")
 	fl.Parse(args)
 	var m cov.Map
+	var span map[int][2]int
+	var runs []*cov.TestRun
+	r := absRoot(*root)
 	if len(src) > 0 {
 		// same numbering as the Delphi instrumenter, plus the path analysis
-		r := absRoot(*root)
 		files, err := collectPas(r, src)
 		if err != nil {
 			return err
@@ -179,7 +182,27 @@ func cmdReport(args []string) error {
 		if err != nil {
 			return err
 		}
-		m = *cov.BuildMap(pascal.Analyze(units), r)
+		a := pascal.Analyze(units)
+		m = *cov.BuildMap(a, r)
+		span = methodSpans(a)
+		if len(tests) > 0 {
+			tfiles, err := collectPas(r, tests)
+			if err != nil {
+				return err
+			}
+			tunits, err := parseFiles(tfiles)
+			if err != nil {
+				return err
+			}
+			ev := interp.New(a, units, tunits)
+			_, log := ev.RunTests()
+			for _, l := range log {
+				if strings.HasPrefix(l, "WARN") {
+					fmt.Println(l)
+				}
+			}
+			runs = ev.Runs
+		}
 	} else if err := cov.ReadJSON(*mapPath, &m); err != nil {
 		return err
 	}
@@ -192,7 +215,25 @@ func cmdReport(args []string) error {
 		all = append(all, &x)
 	}
 	rep := cov.Compute(&m, cov.Merge(all))
+	if span != nil { // com os fontes: gera também o rastreio.html (código de cada método, sem vínculo com testes)
+		if terr := cov.WriteTrace(filepath.Join(*out, "rastreio.html"), r, rep, &m, runs, span, len(runs) > 0); terr != nil {
+			fmt.Fprintln(os.Stderr, "WARN rastreio.html:", terr)
+		}
+	}
 	return writeOutputs(rep, &m, *out, *detail, *minBranch)
+}
+
+// methodSpans maps each method id to its first and last source line.
+func methodSpans(a *pascal.Analysis) map[int][2]int {
+	span := map[int][2]int{}
+	for _, r := range a.Methods {
+		end := r.Line
+		if u := a.Owner[r]; u != nil && r.EndTok >= 0 && r.EndTok < len(u.Toks) {
+			end = u.Toks[r.EndTok].Line
+		}
+		span[r.ID] = [2]int{r.Line, end}
+	}
+	return span
 }
 
 func cmdScan(args []string) error {
@@ -247,6 +288,10 @@ func cmdScan(args []string) error {
 		}
 	}
 	rep := cov.Compute(m, cov.Merge([]*cov.Hits{hits}))
+	span := methodSpans(a)
+	if terr := cov.WriteTrace(filepath.Join(*out, "rastreio.html"), r, rep, m, ev.Runs, span, false); terr != nil {
+		fmt.Fprintln(os.Stderr, "WARN rastreio.html:", terr)
+	}
 	err = writeOutputs(rep, m, *out, *detail, *minBranch)
 	fmt.Printf("\nscan: %d production files, %d test files in %s\n", len(prod), len(tunits), time.Since(start).Round(time.Millisecond))
 	return err

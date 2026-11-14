@@ -55,7 +55,8 @@ Com o Delphi (cobertura de execução real):
 ```bat
 bcov\bin\bcov.exe run --builder dcc --root . --src samples\src ^
   --project samples\tests\dunitx\SampleTestsDUnitX.dproj@Win64 --out .bcov\delphi
-bcovscan report --root . --src samples\src --hits .bcov\delphi\SampleTestsDUnitX.Win64.bcovhits.json --out .bcov\delphi\full
+bcovscan report --root . --src samples\src --tests samples\tests\dunitx --tests samples\tests\dunit ^
+  --hits .bcov\delphi\SampleTestsDUnitX.Win64.bcovhits.json --out .bcov\delphi\full
 ```
 
 O `bcovscan report --src` reconstrói o mapa a partir dos fontes. É ele que acrescenta as combinações entre ifs e o `resumo.html` aos hits do Delphi.
@@ -69,6 +70,7 @@ Cada execução gera em `--out`:
 | Arquivo | Para quê |
 |---|---|
 | `resumo.html` | **comece por aqui**: uma linha por método, com a porcentagem e, em português, o que não foi coberto ("linha 23: o if «N < 0» nunca foi verdadeiro", "combinação não testada: if «ATipo = somar» (L16) falso → if «ATipo = diminuir» (L19) falso") |
+| `rastreio.html` | **para revisar um método**: o código completo de cada método, o que foi e o que não foi coberto em cada linha (ifs, condições, combinações entre ifs) e, no `scan`, setas ligando cada linha ao teste que a executou. Um arquivo só, sem dependências; abra no navegador ou publique como artefato do pipeline. Com `bcovscan report --src` (hits do Delphi) o HTML sai igual, mas sem o vínculo com os testes, a não ser que você passe também `--tests`: aí os números continuam os da execução real e o `scan` só liga cada linha ao teste que a executou |
 | `coverage.html` | todos os itens de cada método, cobertos e não cobertos, com contagem de execuções |
 | `coverage.txt` | o mesmo em texto |
 | `coverage.json` | dados completos (usado por `bcovscan check` e `compare`) |
