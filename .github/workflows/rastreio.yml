@@ -1,0 +1,70 @@
+name: rastreio
+
+# Gera o relatório rastreio.html (código de cada método, o que foi e o que não foi
+# coberto e qual teste cobriu cada linha) e o publica como artefato do run.
+#
+# Manual: aba Actions > rastreio > Run workflow. Os campos são opcionais e, vazios,
+# usam os exemplos do repositório. Também roda a cada push, com os exemplos.
+
+on:
+  workflow_dispatch:
+    inputs:
+      root:
+        description: 'Raiz do projeto (relativa à raiz do repositório)'
+        default: '.'
+      src:
+        description: 'Pastas com o código de produção, separadas por espaço'
+        default: 'samples/src'
+      tests:
+        description: 'Pastas com os testes (DUnit/DUnitX), separadas por espaço'
+        default: 'samples/tests/dunitx samples/tests/dunit'
+  push:
+
+jobs:
+  rastreio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: tools/bcovscan/go.mod
+
+      - name: Compilar o bcovscan
+        working-directory: tools/bcovscan
+        run: go build -o bcovscan .
+
+      - name: Gerar o rastreio
+        env:
+          # entradas passam por variáveis de ambiente, nunca direto no script
+          ROOT: ${{ inputs.root || '.' }}
+          SRC: ${{ inputs.src || 'samples/src' }}
+          TESTS: ${{ inputs.tests || 'samples/tests/dunitx samples/tests/dunit' }}
+        run: |
+          args=()
+          for s in $SRC; do args+=(--src "$s"); done
+          for t in $TESTS; do args+=(--tests "$t"); done
+          tools/bcovscan/bcovscan scan --root "$ROOT" "${args[@]}" --out .bcov/rastreio
+
+      - name: Resumo no run
+        if: always()
+        run: |
+          {
+            echo '### Cobertura de branches (BCov)'
+            echo
+            echo 'Baixe o artefato **rastreio** e abra o `rastreio.html` no navegador.'
+            echo
+            if [ -f .bcov/rastreio/coverage.txt ]; then
+              echo '```'
+              head -n 40 .bcov/rastreio/coverage.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rastreio
+          path: .bcov/rastreio
+          if-no-files-found: error
