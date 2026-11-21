@@ -464,6 +464,16 @@ func (e *Evaluator) logf(format string, a ...any) {
 	e.log = append(e.log, fmt.Sprintf(format, a...))
 }
 
+// common RTL/VCL classes whose fields start nil (we do not parse their units)
+var nilByDefault = map[string]bool{
+	"tstringlist": true, "tstrings": true, "tlist": true, "tobjectlist": true, "tdictionary": true,
+	"tstream": true, "tmemorystream": true, "tfilestream": true, "tstringstream": true, "tcomponent": true,
+	"tdataset": true, "tclientdataset": true, "tfdquery": true, "tfdmemtable": true, "tquery": true,
+	"tform": true, "tpersistent": true, "tobject": true, "tthread": true, "tcollection": true,
+	"tcollectionitem": true, "tfield": true, "tinifile": true, "tregistry": true, "tjsonobject": true,
+	"tjsonarray": true, "tjsonvalue": true, "txmldocument": true, "tbytes": false,
+}
+
 // zero returns the zero value Delphi gives a field of the given type.
 func (e *Evaluator) zero(typ string) Value {
 	t := strings.ToLower(strings.TrimSpace(typ))
@@ -481,6 +491,9 @@ func (e *Evaluator) zero(typ string) Value {
 		return Value{K: KEnum, I: 0, Enum: en}
 	}
 	if ci := e.classes[t]; ci != nil {
+		return Nil()
+	}
+	if nilByDefault[t] {
 		return Nil()
 	}
 	if strings.HasPrefix(t, "i") || strings.HasPrefix(t, "t") && e.classes[t] != nil {

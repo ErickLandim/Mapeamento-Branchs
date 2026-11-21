@@ -2,6 +2,7 @@ package interp
 
 import (
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -422,8 +423,50 @@ func (e *Evaluator) evalIdent(c *ctx, x *pascal.Ident) Value {
 	return e.callName(c, x.Name, nil, false)
 }
 
+// propOf finds the property `name` of an object. It is declared on the class,
+// or, when the object is used through an interface (a mock implementing
+// IDados, say), only on the interface: then the interface's accessors are
+// looked up in the object. As a last resort the Delphi convention Get<Name> /
+// Set<Name> / F<Name> is tried.
+func (e *Evaluator) propOf(o *Object, name string, write bool) *pascal.PropDecl {
+	if p := o.Class.findProp(name); p != nil {
+		return p
+	}
+	has := func(acc string, nargs int) bool {
+		return acc != "" && (o.Fields[acc] != nil || o.Class.findMethod(acc, nargs) != nil)
+	}
+	var names []string
+	for n, ci := range e.classes {
+		if ci.Decl != nil && ci.Decl.IsIntf {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if p := e.classes[n].findProp(name); p != nil {
+			if (!write && has(p.Read, 0)) || (write && has(p.Write, 1)) {
+				return p
+			}
+		}
+	}
+	if !write {
+		for _, acc := range []string{"get" + name, "f" + name} {
+			if has(acc, 0) {
+				return &pascal.PropDecl{Name: name, Read: acc}
+			}
+		}
+	} else {
+		for _, acc := range []string{"set" + name, "f" + name} {
+			if has(acc, 1) {
+				return &pascal.PropDecl{Name: name, Write: acc}
+			}
+		}
+	}
+	return nil
+}
+
 func (e *Evaluator) readProp(c *ctx, o *Object, name string) (Value, bool) {
-	p := o.Class.findProp(name)
+	p := e.propOf(o, name, false)
 	if p == nil {
 		return Value{}, false
 	}
@@ -579,6 +622,14 @@ func (e *Evaluator) evalSel(c *ctx, x *pascal.Sel, args []pascal.Expr, isCall bo
 				return e.assertCall(c, x.Name, args)
 			}
 		}
+	}
+	// TSomething.Create of a class we do not parse (RTL/VCL/third party): a
+	// fresh, non-nil object whose members are opaque. It is what makes
+	// Assigned(FList) true after FList := TStringList.Create.
+	if id, ok := x.X.(*pascal.Ident); ok && (x.Name == "create" || x.Name == "createfmt") && e.classes[id.Name] == nil &&
+		e.lookupVar(c, id.Name) == nil && e.unitByNm[id.Name] == nil && e.enumType[id.Name] == nil && looksLikeClass(id.Name) {
+		ci := &ClassInfo{Name: id.Name, Methods: map[string][]*pascal.Routine{}, Builtin: true}
+		e.classes[id.Name] = ci
 	}
 	recv := e.eval(c, x.X)
 	switch recv.K {
@@ -781,6 +832,13 @@ func (e *Evaluator) assign(c *ctx, l pascal.Expr, v Value) {
 				return
 			}
 		}
+		if c.self != nil {
+			// a field the class declaration did not give us (declared in an
+			// ancestor we do not parse): it is still a field of self
+			nv := e.coerce(v, "")
+			c.self.Fields[x.Name] = &nv
+			return
+		}
 		abort("assignment to unknown variable " + x.Name)
 	case *pascal.Sel:
 		recv := e.eval(c, x.X)
@@ -837,7 +895,7 @@ func (e *Evaluator) assign(c *ctx, l pascal.Expr, v Value) {
 }
 
 func (e *Evaluator) writeProp(c *ctx, o *Object, name string, v Value) bool {
-	p := o.Class.findProp(name)
+	p := e.propOf(o, name, true)
 	if p == nil {
 		return false
 	}
@@ -869,3 +927,8 @@ func (e *Evaluator) execCallStmt(c *ctx, x pascal.Expr) {
 }
 
 func roundHalfEven(f float64) float64 { return math.RoundToEven(f) }
+
+// looksLikeClass: Delphi class names start with T followed by another letter.
+func looksLikeClass(n string) bool {
+	return len(n) > 2 && n[0] == 't' && n[1] >= 'a' && n[1] <= 'z'
+}

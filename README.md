@@ -83,4 +83,8 @@ Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `B
 
 ## Limite
 
-Se um teste usa algo que o interpretador não conhece, ele para e avisa no log (`parcial`). A cobertura pode sair menor que a real, nunca maior.
+O BCov mede se cada branch/condição foi **executada** pelos testes, não se o teste passa. Por isso:
+
+- Assertion sobre valor que o interpretador não rastreia (`AreEqual(x, Obj.Valor)`) é assumida como passando e o teste segue.
+- Se um teste usa algo que o interpretador não conhece e a decisão depende disso (`if Query.Locate(...)`, `SameText(x, ...)` com `x` desconhecido), ele para e avisa no log (`parcial`). O que vem depois não conta. A cobertura sai menor que a real.
+- Campos de classes ancestrais que o BCov não lê, propriedades declaradas só na interface e `TXxx.Create` de classes externas (`TStringList`) são tratados normalmente.
