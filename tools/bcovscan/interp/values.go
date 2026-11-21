@@ -49,6 +49,9 @@ type Object struct {
 	Fields  map[string]*Value
 	Tainted bool // an unmodelled method may have changed it
 	ID      int
+	Mock    *mockState   // a mock object (Delphi-Mocks / Spring4D)
+	Bld     *mockBuilder // a link of a mock Setup chain
+	Coll    *collection  // TList<T>, TStringList, TDictionary<K,V> ...
 }
 
 type Closure struct {

@@ -389,6 +389,20 @@ func (e *Evaluator) execFor(c *ctx, s *pascal.For) {
 					break
 				}
 			}
+		case KObj:
+			var co *collection
+			if coll.Obj != nil {
+				co = coll.Obj.Coll
+			}
+			if co == nil || co.unknown || co.kind != "list" {
+				abort("for-in over unmodelled collection")
+			}
+			snap := append([]*Value(nil), co.items...)
+			for _, p := range snap {
+				if iter(*p) {
+					break
+				}
+			}
 		default:
 			abort("for-in over unmodelled collection")
 		}

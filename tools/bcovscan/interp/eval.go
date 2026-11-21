@@ -623,6 +623,24 @@ func (e *Evaluator) evalSel(c *ctx, x *pascal.Sel, args []pascal.Expr, isCall bo
 			}
 		}
 	}
+	if g, ok := x.X.(*pascal.GenericName); ok && x.Name == "create" {
+		switch {
+		case mockFactories[g.Name] && len(g.Args) == 1:
+			e.argVals(c, args)
+			return e.newMock(g.Args[0])
+		case listFactories[g.Name]:
+			e.argVals(c, args)
+			return e.newCollection(g.Name, "list")
+		case dictFactories[g.Name]:
+			e.argVals(c, args)
+			return e.newCollection(g.Name, "dict")
+		}
+	}
+	if id, ok := x.X.(*pascal.Ident); ok && x.Name == "create" && plainLists[id.Name] && e.lookupVar(c, id.Name) == nil &&
+		(e.classes[id.Name] == nil || e.classes[id.Name].Decl == nil) {
+		e.argVals(c, args)
+		return e.newCollection(id.Name, "list")
+	}
 	// TSomething.Create of a class we do not parse (RTL/VCL/third party): a
 	// fresh, non-nil object whose members are opaque. It is what makes
 	// Assigned(FList) true after FList := TStringList.Create.
@@ -665,6 +683,18 @@ func (e *Evaluator) evalSel(c *ctx, x *pascal.Sel, args []pascal.Expr, isCall bo
 		o := recv.Obj
 		if o == nil {
 			e.raise("eaccessviolation", "Access violation (nil object)")
+		}
+		if o.Mock != nil {
+			return e.mockMember(c, o, x.Name, args)
+		}
+		if o.Bld != nil {
+			return e.builderMember(c, o.Bld, x.Name, args)
+		}
+		if o.Coll != nil {
+			return e.collMember(c, o, x.Name, args)
+		}
+		if o == c.self && isAssertName(x.Name) && o.Class.findMethod(x.Name, len(args)) == nil {
+			return e.assertCall(c, x.Name, args) // Self.CheckEquals(...)
 		}
 		switch x.Name {
 		case "free", "destroy", "disposeof":
@@ -714,6 +744,9 @@ func (e *Evaluator) evalIndex(c *ctx, x *pascal.Index) Value {
 		return Unknown("index")
 	}
 	idx := e.eval(c, x.Args[0])
+	if base.K == KObj && base.Obj != nil && base.Obj.Coll != nil {
+		return e.collIndex(c, base.Obj, idx)
+	}
 	i, ok := idx.ordinal()
 	if !ok {
 		return Unknown("index")
@@ -859,6 +892,10 @@ func (e *Evaluator) assign(c *ctx, l pascal.Expr, v Value) {
 		return // field of something unmodelled
 	case *pascal.Index:
 		base := e.eval(c, x.X)
+		if base.K == KObj && base.Obj != nil && base.Obj.Coll != nil && len(x.Args) == 1 {
+			e.collAssign(base.Obj, e.eval(c, x.Args[0]), v)
+			return
+		}
 		if base.K == KArr {
 			if p := e.ref(c, x); p != nil {
 				*p = v

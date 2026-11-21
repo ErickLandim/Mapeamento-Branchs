@@ -595,12 +595,15 @@ func (ps *Parser) parseConstSection(owner *Routine) {
 
 // parseTypeSection records enums and classes; other types are skipped.
 func (ps *Parser) parseTypeSection() {
+	var attrs []AttrUse
 	for !ps.eof() && (ps.cur().Kind == TIdent || ps.is("[")) {
 		if ps.is("[") {
-			ps.skipBalanced()
+			attrs = append(attrs, ps.parseAttributes()...)
 			continue
 		}
 		nameTok := ps.next()
+		typeAttrs := attrs
+		attrs = nil
 		if ps.is("<") {
 			ps.skipGenericParams()
 		}
@@ -627,6 +630,9 @@ func (ps *Parser) parseTypeSection() {
 				ps.next()
 			}
 			ps.parseClassType(nameTok)
+			if n := len(ps.u.Classes); n > 0 && ps.u.Classes[n-1].Name == nameTok.Low {
+				ps.u.Classes[n-1].ClassAttrs = typeAttrs
+			}
 		case ps.isKw("procedure") || ps.isKw("function") || ps.is("reference"):
 			ps.skipProcType()
 			for !ps.eof() && !ps.is(";") {
@@ -655,6 +661,23 @@ func (ps *Parser) parseClassType(nameTok Token) {
 	}
 	if kindTok.Low == "class" && (ps.is("abstract") || ps.is("sealed")) {
 		ps.next()
+	}
+	if (kindTok.Low == "class" || kindTok.Low == "record") && ps.is("helper") {
+		ps.next()
+		if ps.is("(") {
+			ps.skipBalanced()
+		}
+		ps.accept("for")
+		name := ps.next().Low
+		for ps.is(".") { // unit-qualified name
+			ps.next()
+			name = ps.next().Low
+		}
+		if ps.is("<") {
+			ps.skipGenericParams()
+		}
+		c.HelperFor = name
+		c.IsRecord = false
 	}
 	if ps.is("(") {
 		ps.next()
@@ -696,7 +719,7 @@ func (ps *Parser) parseClassType(nameTok Token) {
 		case t.Low == "class" && (ps.peek(1).Is("procedure") || ps.peek(1).Is("function") || ps.peek(1).Is("constructor") || ps.peek(1).Is("destructor") || ps.peek(1).Is("operator")):
 			ps.next()
 			r := ps.parseRoutineHeader()
-			c.Methods = append(c.Methods, MethodDecl{Name: r.Name, Kind: r.Kind, IsClass: true, Visibility: vis, NParams: len(r.Params)})
+			c.Methods = append(c.Methods, MethodDecl{Name: r.Name, Kind: r.Kind, IsClass: true, Visibility: vis, NParams: len(r.Params), Result: strings.ToLower(r.Result)})
 			c.Attrs[r.Name] = append(c.Attrs[r.Name], pending...)
 			pending = nil
 		case t.Low == "class" && (ps.peek(1).Is("var") || ps.peek(1).Is("property")):
@@ -704,7 +727,7 @@ func (ps *Parser) parseClassType(nameTok Token) {
 		case t.Low == "procedure" || t.Low == "function" || t.Low == "constructor" || t.Low == "destructor" || t.Low == "operator":
 			start := ps.p
 			r := ps.parseRoutineHeader()
-			md := MethodDecl{Name: r.Name, Kind: r.Kind, Visibility: vis, NParams: len(r.Params)}
+			md := MethodDecl{Name: r.Name, Kind: r.Kind, Visibility: vis, NParams: len(r.Params), Result: strings.ToLower(r.Result)}
 			for i := start; i < ps.p; i++ {
 				switch ps.toks[i].Low {
 				case "virtual", "override", "dynamic":
@@ -722,6 +745,11 @@ func (ps *Parser) parseClassType(nameTok Token) {
 			for !ps.eof() && !ps.is(";") {
 				if ps.is("[") {
 					ps.skipBalanced()
+					continue
+				}
+				if ps.is(":") && pd.Type == "" {
+					ps.next()
+					pd.Type = ps.parseTypeName()
 					continue
 				}
 				if ps.is("read") {

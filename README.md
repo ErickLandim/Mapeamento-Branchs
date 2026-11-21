@@ -81,6 +81,13 @@ Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `B
 
 `relatorio.html` com três abas: **Resumo** (o que falta cobrir, em português), **Rastreio** (cada método com setas até a linha do teste que o cobriu) e **Cobertura** (tabela técnica). Saem também `coverage.json`, `cobertura.xml` e `coverage.txt`, em `.bcov/relatorio`.
 
+## O que o interpretador entende
+
+- **Frameworks:** DUnitX (`[TestFixture]`, `[Test]`, `[Test(False)]`, `[TestCase]`, `[Ignore]`, `[Setup]`, `[TearDown]`, `[SetupFixture]`, `[WillRaise]`, métodos `published` do fixture), DUnit (`TTestCase`, `SetUp`/`TearDown`, `Check*`, `ExpectedException`, `StartExpectingException`) e FPCUnit (`Assert*`).
+- **Mocks:** Delphi-Mocks (`TMock<I>`/`TStub<I>`, `Setup.WillReturn/WillReturnDefault/WillRaise/WillExecute.When`, `It0.IsAny`, `Expect`, `Verify`, `Instance`) e Spring4D (`Mock<I>`, `Setup.Returns/Raises/Executes.When`, `Arg.IsAny/IsEqual/IsNil/IsInRange`, `Received`). Fakes escritos à mão (classe que implementa a interface) e subclasses "testáveis" também.
+- **Acesso a privados:** `class helper for` usado no teste.
+- **Coleções:** `TList<T>`, `TObjectList<T>`, `TQueue<T>`, `TStack<T>`, `TDictionary<K,V>`, `TStringList` (Add, Count, Items, IndexOf, ContainsKey, TryGetValue, for-in...).
+
 ## Limite
 
 O BCov mede se cada branch/condição foi **executada** pelos testes, não se o teste passa. Por isso:
