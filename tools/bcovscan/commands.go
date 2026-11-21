@@ -150,7 +150,8 @@ func cmdRun(args []string) error {
 	line := fl.Int("line", 0, "só o método que contém esta linha")
 	detail := fl.Bool("detail", false, "lista todos os itens no terminal")
 	verbose := fl.Bool("v", false, "mostra as decisões do interpretador")
-	var src, tests, ignorar multiFlag
+	var src, tests, libs, ignorar multiFlag
+	fl.Var(&libs, "libs", "pasta de units de apoio, só interpretadas (repetível)")
 	fl.Var(&src, "src", "pasta do código de produção (repetível)")
 	fl.Var(&tests, "tests", "pasta dos testes (repetível)")
 	fl.Var(&ignorar, "ignorar", "extensão, pasta ou padrão a ignorar (repetível)")
@@ -170,6 +171,9 @@ func cmdRun(args []string) error {
 	}
 	if len(tests) > 0 {
 		cfg.Tests = tests
+	}
+	if len(libs) > 0 {
+		cfg.Libs = libs
 	}
 	if len(ignorar) > 0 {
 		cfg.Ignorar = ignorar
@@ -221,7 +225,7 @@ func cmdRun(args []string) error {
 			return nil
 		}
 	}
-	for _, p := range append(append([]string{}, cfg.Src...), cfg.Tests...) {
+	for _, p := range append(append(append([]string{}, cfg.Src...), cfg.Tests...), cfg.Libs...) {
 		if !existe(r, p) {
 			return fmt.Errorf("a pasta %q não existe em %s. Ajuste src:/tests: no .bcov.yml", p, r)
 		}
@@ -247,6 +251,29 @@ func cmdRun(args []string) error {
 	tunits, err := parseFiles(tfiles)
 	if err != nil {
 		return err
+	}
+	// units de apoio (libs): o interpretador as executa quando o código ou os
+	// testes as chamam, mas elas não são instrumentadas nem entram no relatório
+	if len(cfg.Libs) > 0 {
+		lfiles, err := collectPas(r, cfg.Libs, ig)
+		if err != nil {
+			return err
+		}
+		skip := map[string]bool{}
+		for _, f := range append(append([]string{}, files...), tfiles...) {
+			skip[f] = true
+		}
+		for _, f := range lfiles {
+			if skip[f] {
+				continue
+			}
+			lu, err := parseFiles([]string{f})
+			if err != nil {
+				fmt.Printf("WARN lib ignorada: %v\n", err)
+				continue
+			}
+			tunits = append(tunits, lu...)
+		}
 	}
 	a := pascal.Analyze(prod)
 	m := cov.BuildMap(a, r)

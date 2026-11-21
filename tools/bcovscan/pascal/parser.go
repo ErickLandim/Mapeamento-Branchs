@@ -89,6 +89,9 @@ func Parse(path, src string) (u *Unit, err error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	u = &Unit{Path: path, Src: src, Toks: toks, ImplTok: -1, ImplUses: Span{-1, -1}, ProgUses: Span{-1, -1}}
+	if len(toks) <= 1 { // empty file (only the EOF token)
+		return u, nil
+	}
 	ps := &Parser{toks: toks, u: u}
 	defer func() {
 		if r := recover(); r != nil {
@@ -596,7 +599,7 @@ func (ps *Parser) parseConstSection(owner *Routine) {
 // parseTypeSection records enums and classes; other types are skipped.
 func (ps *Parser) parseTypeSection() {
 	var attrs []AttrUse
-	for !ps.eof() && (ps.cur().Kind == TIdent || ps.is("[")) {
+	for !ps.eof() && (ps.is("[") || (ps.cur().Kind == TIdent && (ps.peek(1).Text == "=" || ps.peek(1).Text == "<"))) {
 		if ps.is("[") {
 			attrs = append(attrs, ps.parseAttributes()...)
 			continue
@@ -639,6 +642,7 @@ func (ps *Parser) parseTypeSection() {
 				ps.next()
 			}
 			ps.expect(";")
+			ps.skipDirectives()
 		default:
 			for !ps.eof() && !ps.is(";") {
 				if ps.is("(") || ps.is("[") {
@@ -648,6 +652,19 @@ func (ps *Parser) parseTypeSection() {
 				ps.next()
 			}
 			ps.expect(";")
+		}
+	}
+}
+
+// skipDirectives swallows "stdcall;" style directives after a procedural type.
+func (ps *Parser) skipDirectives() {
+	for !ps.eof() {
+		switch ps.cur().Low {
+		case "stdcall", "cdecl", "safecall", "register", "pascal", "varargs", "far", "near":
+			ps.next()
+			ps.accept(";")
+		default:
+			return
 		}
 	}
 }

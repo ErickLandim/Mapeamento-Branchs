@@ -208,6 +208,75 @@ func (e *Evaluator) builtin(c *ctx, name string, args []pascal.Expr) (Value, boo
 			return Bool(a == b), true
 		}
 		return Unknown(name), true
+	case "matchtext", "matchstr", "ansimatchtext", "ansimatchstr":
+		// MatchText(text, ['a', 'b']): case-insensitive; MatchStr: sensitive
+		if len(args) != 2 {
+			e.argVals(c, args)
+			return Unknown(name), true
+		}
+		text := e.eval(c, args[0])
+		var items []Value
+		if sl, ok := args[1].(*pascal.SetLit); ok { // ['a', 'bc'] is an open array here
+			for _, el := range sl.Elems {
+				items = append(items, e.eval(c, el))
+			}
+		} else if v := e.eval(c, args[1]); v.K == KArr {
+			for _, p := range *v.Arr {
+				items = append(items, *p)
+			}
+		} else {
+			return Unknown(name), true
+		}
+		if text.K != KStr {
+			return Unknown(name), true
+		}
+		ci := name == "matchtext" || name == "ansimatchtext"
+		unsure := false
+		for _, p := range items {
+			if p.K != KStr {
+				unsure = true
+				continue
+			}
+			if (ci && strings.EqualFold(text.S, p.S)) || (!ci && text.S == p.S) {
+				return Bool(true), true
+			}
+		}
+		if unsure {
+			return Unknown(name), true
+		}
+		return Bool(false), true
+	case "startstext", "startsstr", "endstext", "endsstr", "containstext", "containsstr", "ansistartstext", "ansicontainstext", "ansiendstext":
+		// StartsText(sub, text), EndsText(sub, text), ContainsText(text, sub)
+		vs := e.argVals(c, args)
+		if len(vs) == 2 && vs[0].K == KStr && vs[1].K == KStr {
+			a, b := vs[0].S, vs[1].S
+			if strings.HasSuffix(name, "text") {
+				a, b = strings.ToLower(a), strings.ToLower(b)
+			}
+			switch {
+			case strings.Contains(name, "starts"):
+				return Bool(strings.HasPrefix(b, a)), true
+			case strings.Contains(name, "ends"):
+				return Bool(strings.HasSuffix(b, a)), true
+			}
+			return Bool(strings.Contains(a, b)), true
+		}
+		return Unknown(name), true
+	case "samestr", "ansisamestr", "comparestr", "ansicomparestr":
+		vs := e.argVals(c, args)
+		if len(vs) == 2 && vs[0].K == KStr && vs[1].K == KStr {
+			if strings.HasPrefix(name, "compare") || strings.HasPrefix(name, "ansicompare") {
+				return Int(int64(strings.Compare(vs[0].S, vs[1].S))), true
+			}
+			return Bool(vs[0].S == vs[1].S), true
+		}
+		return Unknown(name), true
+	case "isemptystr":
+		vs := e.argVals(c, args)
+		if len(vs) == 1 && vs[0].K == KStr {
+			return Bool(vs[0].S == ""), true
+		}
+		return Unknown(name), true
 	case "inttostr":
 		vs := e.argVals(c, args)
 		if len(vs) == 1 && vs[0].K == KInt {

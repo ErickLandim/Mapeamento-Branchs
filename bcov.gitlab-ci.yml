@@ -16,6 +16,7 @@
     BCOV_CONFIG: ""         # outro arquivo de configuração (padrão .bcov.yml)
     BCOV_SRC: ""            # pasta do código de produção
     BCOV_TESTS: ""          # pasta dos testes
+    BCOV_LIBS: ""           # pasta de units de apoio (só interpretadas, fora do relatório)
     BCOV_IGNORAR: ""        # regras separadas por vírgula, ex.: ".dfm,legado/"
     BCOV_MODO: ""           # tudo | diff
     BCOV_METODOS: ""        # novos | alterados (modo diff)
@@ -47,6 +48,7 @@ cobertura-branches:
       [ -n "$BCOV_CONFIG" ]  && args="$args --config $BCOV_CONFIG"
       [ -n "$BCOV_SRC" ]     && args="$args --src $BCOV_SRC"
       [ -n "$BCOV_TESTS" ]   && args="$args --tests $BCOV_TESTS"
+      [ -n "$BCOV_LIBS" ]    && args="$args --libs $BCOV_LIBS"
       [ -n "$BCOV_MODO" ]    && args="$args --modo $BCOV_MODO"
       [ -n "$BCOV_METODOS" ] && args="$args --metodos $BCOV_METODOS"
       [ -n "$BCOV_MINIMO" ]  && args="$args --minimo $BCOV_MINIMO"

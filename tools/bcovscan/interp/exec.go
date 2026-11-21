@@ -214,7 +214,11 @@ func (e *Evaluator) evalCond(c *ctx, d *pascal.Decision, cond pascal.Expr, flags
 		if len(d.Conds) <= pascal.MaxCombConds {
 			flags |= pascal.FlagCombos
 		}
-		v = e.evalTree(c, d, d.Tree)
+		var known bool
+		v, known = e.evalTree(c, d, d.Tree)
+		if !known {
+			abort("condition not known: " + d.Text)
+		}
 	} else {
 		v = e.boolOf(e.eval(c, cond), d.Text)
 	}
@@ -222,21 +226,38 @@ func (e *Evaluator) evalCond(c *ctx, d *pascal.Decision, cond pascal.Expr, flags
 	return v
 }
 
-func (e *Evaluator) evalTree(c *ctx, d *pascal.Decision, n *pascal.CondNode) bool {
+// evalTree evaluates a condition tree with three-valued logic: an operand we
+// cannot track makes the result unknown unless the other operand settles it
+// (False and ?, True or ?). Unknown atoms record nothing.
+func (e *Evaluator) evalTree(c *ctx, d *pascal.Decision, n *pascal.CondNode) (val, known bool) {
 	switch n.Op {
 	case "atom":
-		v := e.boolOf(e.eval(c, n.Cond.Expr), n.Cond.Text)
-		e.rec.C(d.ID, n.Cond.ID, n.Cond.Pos, v)
-		return v
+		v := e.eval(c, n.Cond.Expr)
+		if v.K != KBool {
+			return false, false
+		}
+		e.rec.C(d.ID, n.Cond.ID, n.Cond.Pos, v.B)
+		return v.B, true
 	case "not":
-		return !e.evalTree(c, d, n.Kids[0])
-	case "and":
-		return e.evalTree(c, d, n.Kids[0]) && e.evalTree(c, d, n.Kids[1])
-	case "or":
-		return e.evalTree(c, d, n.Kids[0]) || e.evalTree(c, d, n.Kids[1])
+		v, k := e.evalTree(c, d, n.Kids[0])
+		return !v, k
+	case "and", "or":
+		absorbing := n.Op == "or" // the value that decides the whole expression
+		l, lk := e.evalTree(c, d, n.Kids[0])
+		if lk && l == absorbing {
+			return absorbing, true
+		}
+		r, rk := e.evalTree(c, d, n.Kids[1])
+		if rk && r == absorbing {
+			return absorbing, true
+		}
+		if lk && rk {
+			return !absorbing, true
+		}
+		return false, false
 	}
 	abort("bad condition node")
-	return false
+	return false, false
 }
 
 func (e *Evaluator) exec(c *ctx, s pascal.Stmt) {

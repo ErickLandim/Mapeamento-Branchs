@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Src        []string // pastas (ou arquivos) do código de produção
 	Tests      []string // pastas (ou arquivos) dos testes
+	Libs       []string // pastas de units de apoio: o código chama, mas não entra no relatório
 	Ignorar    []string // extensões (.dfm), pastas (legado/) ou padrões (*Gerado*)
 	Modo       string   // tudo | diff
 	Metodos    string   // novos | alterados (só no modo diff)
@@ -33,7 +34,7 @@ func defaultConfig() *Config {
 	}
 }
 
-var chavesValidas = []string{"src", "tests", "ignorar", "modo", "metodos", "minimo", "base", "bloquear_em", "saida"}
+var chavesValidas = []string{"src", "tests", "libs", "ignorar", "modo", "metodos", "minimo", "base", "bloquear_em", "saida"}
 
 // parseSimpleYAML lê o subconjunto de YAML que o .bcov.yml usa:
 // "chave: valor", "chave: [a, b]" e listas com "- item".
@@ -123,6 +124,8 @@ func loadConfig(path string, required bool) (*Config, error) {
 			cfg.Src = v
 		case "tests":
 			cfg.Tests = v
+		case "libs":
+			cfg.Libs = v
 		case "ignorar":
 			cfg.Ignorar = v
 		case "modo":

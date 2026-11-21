@@ -36,6 +36,7 @@ bcov --class TPedido --method Confirmar   # só uma parte
 ```yaml
 src: src                 # código de produção
 tests: tests             # testes
+libs: [lib]              # units de apoio que o código chama (não entram no relatório)
 ignorar: [.dfm, legado/] # .dfm ignora também o .pas de mesmo nome
 modo: diff               # tudo | diff (só o que o MR mudou)
 metodos: novos           # novos | alterados (só no modo diff)
@@ -64,7 +65,7 @@ jobs:
       - uses: ErickLandim/Mapeamento-Branchs@main
 ```
 
-Aceita `config`, `src`, `tests`, `ignorar`, `modo`, `metodos`, `minimo` e `base`.
+Aceita `config`, `src`, `tests`, `libs`, `ignorar`, `modo`, `metodos`, `minimo` e `base`.
 
 **GitLab:** suba este repositório como projeto de pipeline da empresa, troque uma vez o caminho `grupo/pipelines-bcov` em `bcov.gitlab-ci.yml` e, em cada projeto:
 
@@ -75,7 +76,7 @@ include:
     file: '/bcov.gitlab-ci.yml'
 ```
 
-Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `BCOV_TESTS`, `BCOV_IGNORAR`, `BCOV_BASE`.
+Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `BCOV_TESTS`, `BCOV_LIBS`, `BCOV_IGNORAR`, `BCOV_BASE`.
 
 ## Relatório
 
@@ -86,6 +87,8 @@ Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `B
 - **Frameworks:** DUnitX (`[TestFixture]`, `[Test]`, `[Test(False)]`, `[TestCase]`, `[Ignore]`, `[Setup]`, `[TearDown]`, `[SetupFixture]`, `[WillRaise]`, métodos `published` do fixture), DUnit (`TTestCase`, `SetUp`/`TearDown`, `Check*`, `ExpectedException`, `StartExpectingException`) e FPCUnit (`Assert*`).
 - **Mocks:** Delphi-Mocks (`TMock<I>`/`TStub<I>`, `Setup.WillReturn/WillReturnDefault/WillRaise/WillExecute.When`, `It0.IsAny`, `Expect`, `Verify`, `Instance`) e Spring4D (`Mock<I>`, `Setup.Returns/Raises/Executes.When`, `Arg.IsAny/IsEqual/IsNil/IsInRange`, `Received`). Fakes escritos à mão (classe que implementa a interface) e subclasses "testáveis" também.
 - **Acesso a privados:** `class helper for` usado no teste.
+- **Units de apoio (`libs:`):** se o código chama algo de outra unit que não faz parte do que você mede (`TAlterdataBase.NuloOuVazio`, funções utilitárias), aponte a pasta em `libs`. O BCov lê e executa essas units, mas não as mede nem as mostra no relatório. Sem isso, o `if` que depende delas fica "desconhecido" e o teste para.
+- **Condições `and`/`or`:** `False and ?` e `True or ?` são resolvidas mesmo com o outro lado desconhecido.
 - **Coleções:** `TList<T>`, `TObjectList<T>`, `TQueue<T>`, `TStack<T>`, `TDictionary<K,V>`, `TStringList` (Add, Count, Items, IndexOf, ContainsKey, TryGetValue, for-in...).
 
 ## Limite
