@@ -1,0 +1,78 @@
+name: BCov - cobertura de branches (Delphi)
+description: Mede cobertura de branches do código Delphi sem compilar, no projeto inteiro ou só no diff do MR, e publica um relatório HTML único.
+
+inputs:
+  config:
+    description: Arquivo de configuração (padrão .bcov.yml na raiz; se não existir, usa os padrões)
+    default: ""
+  src:
+    description: Pasta do código de produção (sobrescreve o .bcov.yml)
+    default: ""
+  tests:
+    description: Pasta dos testes (sobrescreve o .bcov.yml)
+    default: ""
+  ignorar:
+    description: "Regras para ignorar, separadas por vírgula (ex.: .dfm,legado/)"
+    default: ""
+  modo:
+    description: "tudo ou diff (sobrescreve o .bcov.yml)"
+    default: ""
+  metodos:
+    description: "novos ou alterados, só vale no modo diff (sobrescreve o .bcov.yml)"
+    default: ""
+  minimo:
+    description: Cobertura mínima em % (sobrescreve o .bcov.yml)
+    default: ""
+  base:
+    description: Branch base do diff (padrão detectada do pull request)
+    default: ""
+  artefato:
+    description: Nome do artefato com o relatório
+    default: relatorio-cobertura
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ github.action_path }}/tools/bcovscan/go.mod
+        cache: false
+
+    - name: Compilar o bcovscan
+      shell: bash
+      working-directory: ${{ github.action_path }}/tools/bcovscan
+      run: go build -o "$RUNNER_TEMP/bcovscan.exe" .
+
+    - name: Analisar a cobertura
+      shell: bash
+      env:
+        IN_CONFIG: ${{ inputs.config }}
+        IN_SRC: ${{ inputs.src }}
+        IN_TESTS: ${{ inputs.tests }}
+        IN_IGNORAR: ${{ inputs.ignorar }}
+        IN_MODO: ${{ inputs.modo }}
+        IN_METODOS: ${{ inputs.metodos }}
+        IN_MINIMO: ${{ inputs.minimo }}
+        IN_BASE: ${{ inputs.base }}
+      run: |
+        args=(run --root .)
+        [ -n "$IN_CONFIG" ]  && args+=(--config "$IN_CONFIG")
+        [ -n "$IN_SRC" ]     && args+=(--src "$IN_SRC")
+        [ -n "$IN_TESTS" ]   && args+=(--tests "$IN_TESTS")
+        [ -n "$IN_MODO" ]    && args+=(--modo "$IN_MODO")
+        [ -n "$IN_METODOS" ] && args+=(--metodos "$IN_METODOS")
+        [ -n "$IN_MINIMO" ]  && args+=(--minimo "$IN_MINIMO")
+        [ -n "$IN_BASE" ]    && args+=(--base "$IN_BASE")
+        if [ -n "$IN_IGNORAR" ]; then
+          IFS=',' read -ra regras <<< "$IN_IGNORAR"
+          for r in "${regras[@]}"; do args+=(--ignorar "$r"); done
+        fi
+        "$RUNNER_TEMP/bcovscan.exe" "${args[@]}"
+
+    - name: Publicar o relatório
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artefato }}
+        path: .bcov/relatorio
+        if-no-files-found: ignore

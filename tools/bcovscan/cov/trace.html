@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BCov - Rastreio de testes x produção</title>
+<style>
+:root{--bg:#fff;--fg:#1d1d1f;--mut:#666;--line:#ddd;--ok:#1f7a3a;--mid:#9a6700;--low:#b42318;--okb:#e8f5ec;--lowb:#fdecea;--code:#f6f7f9;--hl:#fff4c2}
+@media (prefers-color-scheme:dark){:root{--bg:#161618;--fg:#eee;--mut:#9a9a9a;--line:#333;--ok:#4ade80;--mid:#facc15;--low:#f87171;--okb:#12301d;--lowb:#3a1513;--code:#1e1f22;--hl:#4a4217}}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,sans-serif;margin:0;padding:16px;max-width:1600px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 4px}.mut{color:var(--mut)}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:10px 0;border-bottom:1px solid var(--line)}
+.tabs button{border:1px solid var(--line);border-bottom:0;border-radius:6px 6px 0 0;background:var(--code);color:var(--fg);padding:6px 12px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--bg);font-weight:600;border-color:var(--fg)}
+.tabs button small{margin-left:6px}
+.tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:14px 0}
+.tot>div{border:1px solid var(--line);border-radius:8px;padding:8px 10px}.tot .fl{font-size:12px;margin-top:2px}.tot b{display:block;font-size:20px}
+.ok{color:var(--ok)}.mid{color:var(--mid)}.low{color:var(--low)}.na{color:var(--mut)}
+.bar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.bar input[type=search]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);min-width:240px}
+.bar input[type=number]{width:70px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.bar input[aria-invalid=true]{border-color:var(--low);outline:1px solid var(--low)}
+.faixa{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.legend{font-size:12px;color:var(--mut);margin:4px 0 8px}
+details.unit{border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:6px 10px}
+details.unit>summary{font-weight:600;font-size:15px}
+details.meth{border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
+summary{cursor:pointer}
+summary .r{margin-left:10px;font-weight:400;font-size:13px}
+.tool{position:relative;z-index:8;display:flex;justify-content:flex-end;margin-top:6px}
+.tool button{font:12px system-ui;border:1px solid var(--line);background:var(--code);color:var(--fg);border-radius:6px;padding:3px 8px;cursor:pointer}
+.cols.nolink{grid-template-columns:minmax(0,1fr)}
+.cols.nolink .tests{display:none}
+.aviso{border:1px solid var(--mid);border-radius:8px;padding:8px 10px;margin:10px 0;font-size:13px}
+.cols{position:relative;display:grid;grid-template-columns:minmax(0,1.6fr) 120px minmax(0,1fr);margin:6px 0 8px;align-items:start}
+.prod{grid-column:1;border:1px solid var(--line);border-radius:6px;background:var(--code);overflow:hidden}
+.tests{grid-column:3;display:flex;flex-direction:column;gap:10px}
+svg.arrows{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:6}
+svg.arrows path{fill:none;stroke-width:1.8;opacity:.8}
+svg.arrows path.dim{opacity:.08}
+svg.arrows path.hot{opacity:1;stroke-width:2.8}
+.ln{display:grid;grid-template-columns:46px minmax(0,1fr) minmax(150px,34%);border-bottom:1px solid transparent;cursor:default}
+.ln:hover,.ln.sel{background:var(--hl)}
+.ln .no{color:var(--mut);text-align:right;padding:0 8px;font:12px/1.7 ui-monospace,Consolas,monospace;user-select:none}
+.ln code{font:12.5px/1.7 ui-monospace,Consolas,monospace;white-space:pre;overflow:hidden;text-overflow:ellipsis;padding-right:6px}
+.ln .chips{display:flex;flex-wrap:wrap;gap:3px;padding:2px 4px;align-content:center;justify-content:flex-end}
+.chip{font-size:11px;border-radius:9px;padding:0 6px;line-height:17px;border:1px solid;white-space:nowrap;cursor:default}
+.chip.c{color:var(--ok);background:var(--okb);border-color:var(--ok)}
+.chip.u{color:var(--low);background:var(--lowb);border-color:var(--low)}
+.chip:hover{filter:brightness(1.15);box-shadow:0 0 0 2px var(--hl)}
+.det{grid-column:1/-1;padding:4px 10px 8px 56px;font-size:12px;background:var(--bg);border-top:1px dashed var(--line)}
+.det .itm{margin:2px 0;padding:1px 4px;border-radius:4px}
+.det .itm:hover{background:var(--hl)}
+.tcard{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg)}
+.tcard.hot{outline:2px solid var(--fg)}
+.tcard.drag{z-index:5;box-shadow:0 6px 18px rgba(0,0,0,.35);opacity:.96}
+.tcard>.th{padding:4px 8px;border-bottom:1px solid var(--line);font-size:12px;border-left:5px solid;cursor:grab;user-select:none;touch-action:none}
+.tcard>.th b{font-size:13px}
+.tl{display:grid;grid-template-columns:40px minmax(0,1fr);background:var(--code)}
+.tl .no{color:var(--mut);text-align:right;padding:0 6px;font:12px/1.7 ui-monospace,Consolas,monospace;user-select:none}
+.tl code{font:12.5px/1.7 ui-monospace,Consolas,monospace;white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.tl.call{font-weight:600;box-shadow:inset 3px 0 0 var(--mut)}
+.ln.mark{background:var(--hl);box-shadow:inset 4px 0 0 var(--fg)}
+.paths tr{cursor:pointer}.paths tr:hover{background:var(--hl)}.paths tr.pin{outline:2px solid var(--fg);outline-offset:-2px}
+.tl.mark{background:var(--hl);box-shadow:inset 4px 0 0 var(--fg);outline:2px solid var(--fg);outline-offset:-2px}
+.tl.gap code{color:var(--mut)}
+.paths{margin:6px 0 10px;font-size:13px}.paths table{border-collapse:collapse;width:100%}
+.paths td{border-top:1px solid var(--line);padding:2px 6px;vertical-align:top}
+.paths tr.u{background:var(--lowb)}
+.det .itm.pin{background:var(--hl);outline:1px solid var(--fg)}
+.tag.pin{outline:2px solid var(--fg)}
+.det .itm,.tag{cursor:pointer}
+.msum{margin:4px 0;padding:4px 6px;border-radius:4px}.msum code{font:12px ui-monospace,Consolas,monospace}.dtab{border-collapse:collapse;margin-top:2px}.dtab td{padding:2px 8px 2px 0;vertical-align:top}
+.tag{display:inline-block;border-radius:4px;padding:0 5px;margin:1px 2px;font-size:11px;border:2px solid var(--line)}
+.none{color:var(--low)}
+</style></head><body>
+<h1>Rastreio de testes x produção</h1>
+<div class="mut" id="sub"></div>
+<div class="aviso" id="aviso" style="display:none">Este relatório vem da cobertura de execução real: ele mostra o que foi e o que não foi coberto em cada método, mas não sabe qual teste cobriu cada linha. Para ver o vínculo com os testes, gere o relatório com <code>bcovscan scan</code>.</div>
+<div class="tabs" id="tabs"></div>
+<div class="tot" id="tot"></div>
+<div class="bar">
+<input type="search" id="q" placeholder="Filtrar método ou unit...">
+<span class="faixa">Cobertura do método: de <input type="number" id="pmin" min="0" max="100" step="any" value="0" aria-label="Cobertura inicial em porcentagem"> % até <input type="number" id="pmax" min="0" max="100" step="any" value="100" aria-label="Cobertura final em porcentagem"> %</span>
+<span class="none" id="faixaErro"></span>
+<span class="mut" id="cont"></span>
+</div>
+<div class="legend">Clique numa linha de produção para ver cada item e o teste que o cobriu. Passe o mouse sobre a linha, sobre um item (Verdadeiro, Falso...) ou sobre um teste para ver só as setas relacionadas. Arraste os cards de teste pelo título para reposicioná-los (quando houver vínculo com testes). A cor da seta identifica o teste; verde e vermelho aparecem só nos itens cobertos (✔) e não cobertos (✘).</div>
+<div id="units"></div>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const DS=JSON.parse(document.getElementById('data').textContent);let D=DS[0];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e};
+// cores dos testes: sem vermelho nem verde, que ficam reservados para coberto / não coberto
+const HUES=[210,230,255,275,295,315,335,190,45,60];
+const col=id=>'hsl('+HUES[id%HUES.length]+',70%,'+(52+Math.floor(id/HUES.length)%3*7)+'%)';
+// coberto = executado ao menos uma vez (não depende de haver teste ligado, que só existe no modo scan)
+const cob=it=>it[4]>0;
+// chave de um vínculo: card e linha do teste que cobriu o item
+const ks=it=>(it[6]||[]).map(p=>p[0]+'|'+p[1]);
+const kc=k=>+k.split('|')[0];
+const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
+const plural=(n,s,p)=>n+' '+(n==1?s:p);
+const pc=a=>a[1]==0?100:a[0]*100/a[1];
+const cl=a=>a[1]==0?'na':pc(a)>=100?'ok':pc(a)>=50?'mid':'low';
+const rt=(n,a)=>'<span class="r '+cl(a)+'">'+n+' '+a[0]+'/'+a[1]+'</span>';
+const sums=s=>rt('Branches',s.branch)+rt('Condições',s.condition)+rt('Combinações',s.combination)+rt('Caminhos',s.path);
+const cname=c=>D.cards[c].unit+' › '+D.cards[c].name;
+const short=(s,n)=>s.length>n?s.slice(0,n-1)+'…':s;
+function setHeader(){
+  const av=document.getElementById('aviso');
+  av.style.display=(D.linked&&!D.mixed)?'none':'';
+  av.innerHTML=D.linked?'Os números vêm da execução real. O vínculo com os testes vem da interpretação estática (<code>bcovscan scan</code>): uma linha coberta na execução real pode aparecer sem card se o scan não conseguir simular aquele teste.':'Este relatório vem da cobertura de execução real: ele mostra o que foi e o que não foi coberto em cada método, mas não sabe qual teste cobriu cada linha. Para ver o vínculo com os testes, passe <code>--tests</code> ao <code>bcovscan report</code> ou gere o relatório com <code>bcovscan scan</code>.';
+  document.getElementById('sub').textContent='Gerado em '+D.when+(D.linked?' · '+plural(D.tests,'método de teste','métodos de teste'):'');
+  document.getElementById('tot').innerHTML=[['Branches','branch'],['Condições','condition'],['Combinações','combination'],['Caminhos entre ifs','path'],['Todos os itens','all']]
+    .map(([n,k])=>'<div>'+n+'<b class="'+cl(D.total[k])+'">'+pc(D.total[k]).toFixed(1)+'%</b>'+D.total[k][0]+'/'+D.total[k][1]+'<div class="fl mut" data-k="'+k+'"></div></div>').join('');
+}
+// texto de um item de cobertura (it = [linha, categoria, tipo, rótulo, contagem, testes])
+function itemText(it){
+  const cat=it[1],kind=it[2],label=it[3];
+  if(cat=='condition')return 'Condição '+label;
+  if(cat=='combination')return 'Combinação '+label;
+  if(kind=='method')return 'Nenhum bloco do método entrou';
+  return cap(label)+' do '+kind;
+}
+function renderMethod(mt,file,box){
+  const src=D.files[file]||[];
+  const state={line:null,card:null,chip:null,pin:null};
+  const wrap=el('div','cols'+(D.linked?'':' nolink')),prod=el('div','prod'),tests=el('div','tests');
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('class','arrows');
+  const byLine={},lineCards={},cardsUsed=new Set();
+  mt.items.forEach(it=>{
+    it[5].forEach(c=>cardsUsed.add(c));
+    if(it[1]=='path')return;
+    (byLine[it[0]]=byLine[it[0]]||[]).push(it);
+    (it[6]||[]).forEach(p=>{(lineCards[it[0]]=lineCards[it[0]]||new Map()).set(p[0]+'|'+p[1],p)});
+  });
+  Object.keys(mt.reach).forEach(c=>cardsUsed.add(+c));
+  const rows={};
+  // clicar num item (ou teste) do subgrupo fixa só as setas dele; clicar de novo libera todas
+  function pin(key,n,set){
+    state.pin=(state.pin&&state.pin.key==key)?null:{key:key,n:n,set:set};
+    box.querySelectorAll('[data-pk]').forEach(x=>x.classList.toggle('pin',!!state.pin&&x.dataset.pk==state.pin.key));
+    draw();
+  }
+  const hover=(n,set)=>{state.chip=set?{n:n,set:set}:null;draw()};
+  // grupo das combinações entre ifs (caminhos)
+  function pathsEl(){
+    const pit=mt.items.filter(i=>i[1]=='path');
+    if(!(pit.length||mt.pathsHidden))return null;
+    const pd=el('div','paths');
+    const imp=mt.impossible?' · <span class="mut">'+plural(mt.impossible,'combinação impossível (provada pelo código) ignorada','combinações impossíveis (provadas pelo código) ignoradas')+'</span>':'';
+    pd.innerHTML='<b>Combinações entre ifs (caminhos):</b> '+mt.sum.path[0]+'/'+mt.sum.path[1]+imp+' <span class="mut">· Clique numa combinação para marcar as linhas dela.</span>';
+    const tb=el('table');
+    pit.forEach((i,ix)=>{
+      const tr=el('tr',cob(i)?'c':'u');
+      tr.dataset.pk='p|'+ix;tr.title='Marca as linhas de produção e de teste desta combinação';
+      tr.innerHTML='<td>'+(cob(i)?'✔':'✘')+'</td><td>'+esc(i[3])+'</td><td>'+
+        (i[5].length?i[5].map(c=>'<span class="tag" style="border-color:'+col(c)+'">'+esc(cname(c))+'</span>').join(''):(cob(i)?'':'<span class="none">'+(D.linked?'Nenhum teste':'Não coberto')+'</span>'))+'</td>';
+      const lines=new Set([...i[3].matchAll(/L(\d+)/g)].map(x=>+x[1]));
+      const set=new Set(ks(i));
+      tr.addEventListener('mouseenter',()=>hover(lines,set));
+      tr.addEventListener('mouseleave',()=>hover(lines,null));
+      tr.addEventListener('click',e=>{e.stopPropagation();pin('p|'+ix,lines,set)});
+      tb.appendChild(tr);
+    });
+    pd.appendChild(tb);
+    if(mt.pathsHidden)pd.appendChild(el('div','mut','Mais '+plural(mt.pathsHidden,'caminho não coberto omitido','caminhos não cobertos omitidos')+' (veja o coverage.json).'));
+    return pd;
+  }
+  // resumo do item "nenhum bloco entrou": todas as decisões do método e a combinação sem entrar em nenhuma
+  function methodSummary(it){
+    const box=el('div','msum');
+    const decs=new Map();
+    mt.items.forEach(x=>{
+      if(x[1]!='branch'||x[2]=='method')return;
+      const k=x[0]+'|'+x[2];
+      if(!decs.has(k))decs.set(k,{line:x[0],kind:x[2],its:[]});
+      decs.get(k).its.push(x);
+    });
+    const list=[...decs.values()].sort((a,b)=>a.line-b.line);
+    const none=mt.items.find(x=>x[1]=='path'&&x[3].split(' + ').every(p=>/( falso| não entrou| else implícito.*)$/.test(p)));
+    let h='<div><b>'+(cob(it)?'✔':'✘')+' Nenhum bloco do método entrou</b> <span class="mut">('+it[4]+'×)</span></div>'+
+      '<div>É uma chamada que percorre o método sem executar nenhum bloco de if, while, for ou case: todas as decisões abaixo ficam do lado que não entra no bloco.</div>';
+    h+='<div class="mut" style="margin-top:4px">Todas as decisões do método ('+list.length+'):</div><table class="dtab">';
+    list.forEach(dc=>{
+      h+='<tr><td class="mut">L'+dc.line+'</td><td><code>'+esc((src[dc.line-1]||'').trim())+'</code></td><td>'+
+        dc.its.map(x=>'<span class="chip '+(cob(x)?'c':'u')+'">'+(cob(x)?'✔ ':'✘ ')+esc(cap(x[3]))+' ('+x[4]+'×)</span>').join(' ')+'</td></tr>';
+    });
+    h+='</table>';
+    h+='<div style="margin-top:6px"><b>Combinação sem entrar em nenhum bloco:</b> ';
+    if(none){
+      h+=(cob(none)?'✔':'✘')+' <code>'+esc(none[3])+'</code> ';
+      h+=cob(none)?(none[5].length?'<span class="mut">coberta por:</span> ':'<span class="mut">coberta na execução.</span>'):'<span class="none">'+(D.linked?'Nenhum teste faz essa combinação.':'Nenhuma execução fez essa combinação.')+'</span>';
+    }else if(mt.pathsHidden){
+      h+='<span class="mut">Esta combinação não está na lista exibida (limite de caminhos não cobertos omitidos). Veja o coverage.json.</span>';
+    }else{
+      h+='<span class="mut">O código prova que ela é impossível, então fica fora da porcentagem.</span>';
+    }
+    h+='</div>';
+    box.innerHTML=h;
+    if(none&&none[5].length){
+      none[5].forEach(c=>{const t=el('span','tag',esc(cname(c)));t.style.borderColor=col(c);box.lastChild.appendChild(t)});
+    }
+    if(!cob(it)&&none&&!cob(none)){
+      box.appendChild(el('div','mut','Para cobrir, é preciso uma chamada em que todas as decisões acima sejam falsas. Se o código garante que algum bloco sempre executa (por exemplo, um enum com poucos valores), essa combinação pode ser inalcançável na prática.'));
+    }
+    const pd=pathsEl();if(pd)box.appendChild(pd);
+    return box;
+  }
+  function chipEls(n,its){
+    const out=[];let combo=[0,0],cset=new Set();
+    const mk=(txt,ok,title,set)=>{
+      const s=el('span','chip '+(ok?'c':'u'));s.textContent=txt;s.title=title;
+      s.addEventListener('mouseenter',()=>hover(n,set));
+      s.addEventListener('mouseleave',()=>hover(n,null));
+      return s;
+    };
+    for(const it of its){
+      if(it[1]=='combination'){combo[1]++;if(cob(it)){combo[0]++;ks(it).forEach(k=>cset.add(k))}continue}
+      const txt=it[1]=='condition'?it[3]:it[2]=='method'?'Nenhum bloco entrou':cap(it[3]);
+      out.push(mk((cob(it)?'✔ ':'✘ ')+short(txt,26),cob(it),itemText(it)+(cob(it)?'':(D.linked?' - nenhum teste cobre':' - não coberto')),new Set(ks(it))));
+    }
+    if(combo[1])out.push(mk('Combinações '+combo[0]+'/'+combo[1],combo[0]==combo[1],'Combinações de condições',cset));
+    return out;
+  }
+  for(let n=mt.line;n<=mt.end;n++){
+    const r=el('div','ln');r.dataset.n=n;
+    const its=byLine[n]||[];
+    r.innerHTML='<span class="no">'+n+'</span><code title="'+esc(src[n-1]||'')+'">'+(esc(src[n-1]||'')||' ')+'</code>';
+    const chips=el('span','chips');chipEls(n,its).forEach(c=>chips.appendChild(c));r.appendChild(chips);
+    rows[n]=r;prod.appendChild(r);
+    if(its.length)r.style.cursor='pointer';
+    r.addEventListener('mouseenter',()=>{state.line=n;draw()});
+    r.addEventListener('mouseleave',()=>{state.line=null;state.chip=null;draw()});
+    r.addEventListener('click',()=>{
+      if(!its.length)return;
+      const old=r.querySelector('.det');
+      if(old){old.remove();r.classList.remove('sel');if(state.pin&&(state.pin.n===n||String(state.pin.key).startsWith('p|')))state.pin=null}
+      else{
+        r.classList.add('sel');
+        const d=el('div','det');
+        d.addEventListener('click',e=>e.stopPropagation());
+        its.forEach(it=>{
+          if(it[2]=='method'){d.appendChild(methodSummary(it));return}
+          const row=el('div','itm');const ik=n+'|'+its.indexOf(it);row.dataset.pk=ik;
+          const head=el('span','',(cob(it)?'✔ ':'✘ ')+'<b>'+esc(itemText(it))+'</b> <span class="mut">('+it[4]+'×)</span> '+(it[5].length?'←':'')+' ');
+          row.appendChild(head);
+          if(it[5].length){
+            it[5].forEach(c=>{
+              const mine=(it[6]||[]).filter(p=>p[0]==c);
+              const ls=mine.map(p=>p[1]).filter(l=>l>0);
+              const cset=new Set(mine.map(p=>p[0]+'|'+p[1]));
+              const t=el('span','tag',esc(cname(c))+' <span class="mut">'+esc(D.cards[c].file.split('/').pop())+':'+(ls.length?ls.join(', '):D.cards[c].line)+'</span>');
+              t.style.borderColor=col(c);t.dataset.pk=ik+'|'+c;
+              t.addEventListener('mouseenter',e=>{e.stopPropagation();hover(n,cset)});
+              t.addEventListener('mouseleave',e=>{e.stopPropagation();hover(n,new Set(ks(it)))});
+              t.addEventListener('click',e=>{e.stopPropagation();pin(ik+'|'+c,n,cset)});
+              row.appendChild(t);
+            });
+          }else if(!cob(it))row.appendChild(el('span','none',D.linked?'Nenhum teste cobre':'Não coberto'));
+          row.addEventListener('mouseenter',()=>hover(n,new Set(ks(it))));
+          row.addEventListener('mouseleave',()=>hover(n,null));
+          if(it[5].length)row.addEventListener('click',()=>pin(ik,n,new Set(ks(it))));
+          d.appendChild(row);
+        });
+        r.appendChild(d);
+      }
+      draw();
+    });
+  }
+  const used=[...cardsUsed].sort((a,b)=>a-b);
+  const trows={},thead={},tcards={};
+  function makeDrag(card,head){
+    let sx=0,sy=0,on=false;card._ox=0;card._oy=0;
+    head.addEventListener('pointerdown',e=>{
+      if(e.button!==0)return;
+      on=true;sx=e.clientX-card._ox;sy=e.clientY-card._oy;
+      head.setPointerCapture(e.pointerId);card.classList.add('drag');head.style.cursor='grabbing';e.preventDefault();
+    });
+    head.addEventListener('pointermove',e=>{
+      if(!on)return;
+      card._ox=e.clientX-sx;card._oy=e.clientY-sy;
+      card.style.transform='translate('+card._ox+'px,'+card._oy+'px)';
+      const wr=wrap.getBoundingClientRect(),cr=card.getBoundingClientRect();
+      if(cr.top<wr.top)card._oy+=wr.top-cr.top;
+      if(cr.left<wr.left)card._ox+=wr.left-cr.left;
+      card.style.transform='translate('+card._ox+'px,'+card._oy+'px)';draw();
+    });
+    const end=()=>{on=false;card.classList.remove('drag');head.style.cursor='grab'};
+    head.addEventListener('pointerup',end);head.addEventListener('pointercancel',end);
+  }
+  used.forEach(c=>{
+    const cd=D.cards[c],tsrc=D.files[cd.file]||[];
+    const card=el('div','tcard');card.dataset.card=c;tcards[c]=card;
+    const extra=[...new Set(mt.extra[c]||[])];
+    const th=el('div','th','<b>'+esc(cd.unit)+'</b> › '+esc(cd.name)+'<div class="mut">'+esc(cd.file)+':'+cd.line+(cd.cases.length?' · Casos: '+esc(cd.cases.join(', ')):'')+'</div>'+(extra.length?'<div class="mut">Também via '+esc(extra.join(', '))+'</div>':''));
+    th.style.borderLeftColor=col(c);thead[c]=th;card.appendChild(th);
+    const calls=new Set(mt.reach[c]||[]);
+    const vis=new Set();const total=cd.end-cd.line+1;
+    if(total<=60){for(let n=cd.line;n<=cd.end;n++)vis.add(n)}
+    else{for(let n=cd.line;n<=cd.line+2;n++)vis.add(n);vis.add(cd.end);calls.forEach(k=>{for(let n=k-5;n<=k+5;n++)if(n>=cd.line&&n<=cd.end)vis.add(n)})}
+    let last=cd.line-1;
+    for(let n=cd.line;n<=cd.end;n++){
+      if(!vis.has(n))continue;
+      if(n>last+1)card.appendChild(el('div','tl gap','<span class="no">…</span><code>  ...</code>'));
+      const r=el('div','tl'+(calls.has(n)?' call':''));
+      r.innerHTML='<span class="no">'+n+'</span><code title="'+esc(tsrc[n-1]||'')+'">'+(esc(tsrc[n-1]||'')||' ')+'</code>';
+      trows[c+':'+n]=r;card.appendChild(r);last=n;
+    }
+    card.addEventListener('mouseenter',()=>{state.card=c;draw()});
+    card.addEventListener('mouseleave',()=>{state.card=null;draw()});
+    makeDrag(card,th);
+    tests.appendChild(card);
+  });
+  if(!used.length&&D.linked)tests.appendChild(el('div','mut','Nenhum teste executou este método.'));
+  if(used.length){
+    const tool=el('div','tool');
+    const b=el('button','','Restaurar posição dos testes');
+    b.onclick=()=>{used.forEach(c=>{const k=tcards[c];k._ox=0;k._oy=0;k.style.transform=''});draw()};
+    tool.appendChild(b);box.appendChild(tool);
+  }
+  wrap.appendChild(prod);wrap.appendChild(tests);wrap.appendChild(svg);box.appendChild(wrap);
+  const arrows=[];
+  Object.keys(lineCards).forEach(n=>{lineCards[n].forEach((p,key)=>{
+    const c=p[0],l=p[1];
+    arrows.push({n:+n,c:c,key:key,to:(l&&trows[c+':'+l])||thead[c]});
+  })});
+  const drawAll=arrows.length<=250;
+  function draw(){
+    svg.innerHTML='';
+    const b=wrap.getBoundingClientRect();if(!b.width)return;
+    svg.setAttribute('width',b.width);svg.setAttribute('height',b.height);
+    const pr=prod.getBoundingClientRect();
+    const ch=state.chip||state.pin;
+    const pinned=[...prod.querySelectorAll('.ln.sel')].map(x=>+x.dataset.n);
+    const focus=ch||state.line!=null||state.card!=null||pinned.length>0;
+    const hotC=ch?new Set([...ch.set].map(kc)):null;
+    used.forEach(c=>tcards[c].classList.toggle('hot',hotC?hotC.has(c):state.card==c));
+    Object.values(trows).forEach(r=>r.classList.remove('mark'));
+    Object.values(rows).forEach(r=>r.classList.remove('mark'));
+    if(ch)(ch.n instanceof Set?[...ch.n]:[ch.n]).forEach(l=>{if(rows[l])rows[l].classList.add('mark')});
+    arrows.forEach(a=>{
+      let on,show;
+      if(ch){on=(ch.n instanceof Set?ch.n.has(a.n):ch.n==a.n)&&ch.set.has(a.key);show=on}
+      else{on=state.line==a.n||state.card==a.c||pinned.includes(a.n);show=drawAll||on}
+      if(!show)return;
+      if(on&&a.to.classList.contains('tl'))a.to.classList.add('mark');
+      const r1=rows[a.n].querySelector('code').getBoundingClientRect(),r2=a.to.getBoundingClientRect();
+      const x1=pr.right-b.left,y1=r1.top+r1.height/2-b.top,x2=r2.left-b.left,y2=r2.top+Math.min(r2.height/2,12)-b.top;
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('d','M'+x1+','+y1+' C'+(x1+70)+','+y1+' '+(x2-70)+','+y2+' '+x2+','+y2);
+      p.setAttribute('stroke',col(a.c));
+      p.setAttribute('class',on?'hot':(focus?'dim':''));
+      svg.appendChild(p);
+      const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      dot.setAttribute('cx',x2);dot.setAttribute('cy',y2);dot.setAttribute('r',3.5);dot.setAttribute('fill',col(a.c));
+      dot.setAttribute('opacity',on||!focus?'1':'.15');svg.appendChild(dot);
+    });
+  }
+  box._draw=draw;draw();window.addEventListener('resize',draw);
+  // sem o item "nenhum bloco entrou" não há onde encaixar o grupo, então ele fica abaixo do método
+  if(!mt.items.some(x=>x[2]=='method')){const pd=pathsEl();if(pd)box.appendChild(pd)}
+}
+function buildUnits(){
+  const root=document.getElementById('units');root.innerHTML='';
+  D.units.forEach(u=>{
+    const d=el('details','unit');
+    d.dataset.f=u.file.toLowerCase();
+    d.innerHTML='<summary>'+esc(u.file)+'<span class="us"></span></summary>';
+    u.methods.forEach(mt=>{
+      const m=el('details','meth');m.dataset.n=mt.name.toLowerCase();m.dataset.p=pc(mt.sum.all);m._mt=mt;
+      const nt=new Set();mt.items.forEach(i=>i[5].forEach(c=>nt.add(c)));
+      m.innerHTML='<summary><code>'+esc(mt.name)+'</code> <span class="mut">Linhas '+mt.line+'–'+mt.end+' · '+plural(mt.calls,'chamada','chamadas')+(D.linked?' · '+plural(nt.size,'teste','testes'):'')+'</span>'+sums(mt.sum)+'<span class="r '+cl(mt.sum.all)+'"><b>Cobertura do método '+pc(mt.sum.all).toFixed(1)+'%</b> ('+mt.sum.all[0]+'/'+mt.sum.all[1]+')</span></summary>';
+      let done=false;
+      m.addEventListener('toggle',()=>{
+        if(m.open&&!done){done=true;const b=el('div');m.appendChild(b);renderMethod(mt,u.file,b)}
+        else if(m.open&&m.lastChild._draw)m.lastChild._draw();
+      });
+      d.appendChild(m);
+    });
+    root.appendChild(d);
+  });
+  if(D.units.length==1)document.querySelector('details.unit').open=true;
+  filt();
+}
+// filtro: texto e faixa de cobertura (inicial não pode ser maior que a final)
+function filt(){
+  const q=document.getElementById('q').value.toLowerCase();
+  const imin=document.getElementById('pmin'),imax=document.getElementById('pmax'),err=document.getElementById('faixaErro');
+  const num=(i,def)=>{const v=parseFloat(i.value);return isNaN(v)?def:Math.min(100,Math.max(0,v))};
+  const lo=num(imin,0),hi=num(imax,100);
+  imax.min=lo;imin.max=hi;
+  const bad=lo>hi;
+  imin.setAttribute('aria-invalid',bad);imax.setAttribute('aria-invalid',bad);
+  err.textContent=bad?'O valor inicial não pode ser maior que o final.':'';
+  if(bad)return;
+  const ativo=q!==''||lo>0||hi<100;
+  let shown=0,total=0;
+  const KS=['branch','condition','combination','path','all'];
+  const agg={};KS.forEach(k=>agg[k]=[0,0]);
+  document.querySelectorAll('details.unit').forEach(u=>{
+    let any=false,nm=0,full=0;const us=[0,0];
+    u.querySelectorAll('details.meth').forEach(m=>{
+      const p=parseFloat(m.dataset.p);
+      const ok=(!q||m.dataset.n.includes(q)||u.dataset.f.includes(q))&&p>=lo-1e-9&&p<=hi+1e-9;
+      m.style.display=ok?'':'none';total++;
+      if(ok){any=true;shown++;nm++;if(p>=100-1e-9)full++;us[0]+=m._mt.sum.all[0];us[1]+=m._mt.sum.all[1];KS.forEach(k=>{agg[k][0]+=m._mt.sum[k][0];agg[k][1]+=m._mt.sum[k][1]})}
+    });
+    const sp=u.querySelector('.us');
+    if(sp)sp.innerHTML=rt('Métodos com 100% de cobertura',[full,nm])+rt('Todos os itens',us)+'<span class="r mut">('+pc(us).toFixed(1)+'%)</span>';
+    u.style.display=any?'':'none';
+    if(ativo&&any)u.open=true;
+  });
+  document.getElementById('cont').textContent='Exibindo '+shown+' de '+plural(total,'método','métodos')+(ativo?' · Cobertura dos exibidos: '+pc(agg.all).toFixed(1)+'%':'');
+  document.querySelectorAll('.tot .fl').forEach(f=>{
+    const a=agg[f.dataset.k];
+    f.innerHTML=ativo?'Filtrado: <span class="'+cl(a)+'">'+pc(a).toFixed(1)+'% ('+a[0]+'/'+a[1]+')</span>':'';
+  });
+}
+['q','pmin','pmax'].forEach(id=>document.getElementById(id).addEventListener('input',filt));
+function pick(i){
+  D=DS[i];
+  document.querySelectorAll('#tabs button').forEach((b,j)=>b.classList.toggle('on',j==i));
+  try{history.replaceState(null,'','#'+i)}catch(e){}
+  setHeader();buildUnits();
+}
+if(DS.length>1){
+  const tb=document.getElementById('tabs');
+  DS.forEach((d,i)=>{
+    const b=el('button','',esc(d.name||('Cenário '+(i+1)))+'<small class="'+cl(d.total.all)+'">'+pc(d.total.all).toFixed(1)+'%</small>');
+    b.onclick=()=>pick(i);tb.appendChild(b);
+  });
+}else document.getElementById('tabs').style.display='none';
+pick(Math.min(DS.length-1,Math.max(0,parseInt((location.hash||'#0').slice(1))||0)));
+</script></body></html>

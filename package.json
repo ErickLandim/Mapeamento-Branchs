@@ -1,0 +1,11 @@
+{
+  "name": "bcov",
+  "version": "1.0.0",
+  "description": "Cobertura de branches para Delphi (DUnit/DUnitX) sem compilar, para usar em pipeline ou local",
+  "bin": { "bcov": "bin/bcov.js" },
+  "scripts": { "postinstall": "node scripts/build.js --soft" },
+  "files": ["bin/bcov.js", "scripts/build.js", "tools/bcovscan"],
+  "engines": { "node": ">=16" },
+  "license": "UNLICENSED",
+  "private": true
+}

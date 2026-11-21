@@ -1,1 +1,86 @@
-# Mapeamento-Branchs
+# BCov
+
+Cobertura de branches para Delphi (DUnit e DUnitX), sem compilar nada. Lê o código e os testes, executa os testes com um interpretador e gera um `relatorio.html` único. Serve como etapa de pipeline (GitHub e GitLab) e para uso local.
+
+Mede, por método: branches, condições (`and`/`or`), combinações de condições e caminhos entre ifs. Combinações impossíveis não entram na conta.
+
+## Instalar na máquina
+
+Precisa de [Node](https://nodejs.org) e [Go](https://go.dev/dl) (o Go só compila a ferramenta, uma vez).
+
+```
+npm install -g github:ErickLandim/Mapeamento-Branchs
+```
+
+Ou sem instalar, direto:
+
+```
+npx github:ErickLandim/Mapeamento-Branchs --root C:\meu\projeto
+```
+
+Só com Go: `go install github.com/ErickLandim/Mapeamento-Branchs/tools/bcovscan@latest` (o comando fica como `bcovscan run ...`). Repositório privado: precisa estar logado no git.
+
+## Usar
+
+```
+bcov                                      # analisa a pasta atual
+bcov --root C:\projeto --src src --tests tests
+bcov --modo diff --base main              # só o que mudou em relação à main
+bcov --class TPedido --method Confirmar   # só uma parte
+```
+
+`bcov-local.bat` faz o mesmo com perguntas (pasta, unit, classe, método, linha) e abre o relatório. `bcov --help` mostra todas as opções.
+
+## Configurar: `.bcov.yml` na raiz do projeto (opcional)
+
+```yaml
+src: src                 # código de produção
+tests: tests             # testes
+ignorar: [.dfm, legado/] # .dfm ignora também o .pas de mesmo nome
+modo: diff               # tudo | diff (só o que o MR mudou)
+metodos: novos           # novos | alterados (só no modo diff)
+minimo: 100              # % mínima (padrão: 100 no diff, nenhum no tudo)
+bloquear_em: [main, master, integration*, develop*, release*]
+```
+
+Todas as chaves são opcionais.
+
+- **Modo diff, `novos`:** só métodos que não existiam na base. Mexer em método antigo não exige nada.
+- **Modo diff, `alterados`:** também métodos existentes que o MR mexeu, contando só os itens das linhas mudadas.
+- **Mínimo:** abaixo dele, MR para uma branch de `bloquear_em` é **bloqueado**; para qualquer outra (task para feature) só **avisa**. O alvo vem do pipeline.
+
+## Pipeline
+
+**GitHub**
+
+```yaml
+on: pull_request
+jobs:
+  cobertura:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }      # o diff precisa do histórico
+      - uses: ErickLandim/Mapeamento-Branchs@main
+```
+
+Aceita `config`, `src`, `tests`, `ignorar`, `modo`, `metodos`, `minimo` e `base`. Repositório privado: libere em Settings > Actions > General > Access.
+
+**GitLab:** suba este repositório como projeto de pipeline da empresa, troque uma vez o caminho `grupo/pipelines-bcov` em `bcov.gitlab-ci.yml` e, em cada projeto:
+
+```yaml
+include:
+  - project: 'grupo/pipelines-bcov'
+    ref: main
+    file: '/bcov.gitlab-ci.yml'
+```
+
+Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `BCOV_TESTS`, `BCOV_IGNORAR`, `BCOV_BASE`.
+
+## Relatório
+
+`relatorio.html` com três abas: **Resumo** (o que falta cobrir, em português), **Rastreio** (cada método com setas até a linha do teste que o cobriu) e **Cobertura** (tabela técnica). Saem também `coverage.json`, `cobertura.xml` e `coverage.txt`, em `.bcov/relatorio`.
+
+## Limite
+
+Se um teste usa algo que o interpretador não conhece, ele para e avisa no log (`parcial`). A cobertura pode sair menor que a real, nunca maior.

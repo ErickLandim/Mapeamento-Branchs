@@ -1,0 +1,6 @@
+.bcov/
+tools/bcovscan/bcovscan.exe
+tools/bcovscan/bcovscan
+bin/bcovscan
+bin/bcovscan.exe
+node_modules/

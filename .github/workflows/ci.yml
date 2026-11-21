@@ -1,0 +1,19 @@
+name: Compilar
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/bcovscan/go.mod
+      - name: Vet e build
+        working-directory: tools/bcovscan
+        run: |
+          go vet ./...
+          go build -o /tmp/bcovscan .

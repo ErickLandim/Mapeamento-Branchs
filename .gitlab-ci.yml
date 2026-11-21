@@ -1,0 +1,13 @@
+# Verificação do próprio BCov: compila e roda o vet.
+# Para usar o BCov em outro projeto, veja o README (include do bcov.gitlab-ci.yml).
+
+stages:
+  - test
+
+compilar:
+  stage: test
+  image: golang:1.26
+  script:
+    - cd tools/bcovscan
+    - go vet ./...
+    - go build -o /tmp/bcovscan .
