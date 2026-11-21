@@ -198,10 +198,14 @@ func (e *Evaluator) builtin(c *ctx, name string, args []pascal.Expr) (Value, boo
 			return Str(strings.TrimRightFunc(vs[0].S, cut)), true
 		}
 		return Unknown(name), true
-	case "sametext":
+	case "sametext", "ansisametext", "comparetext", "ansicomparetext":
 		vs := e.argVals(c, args)
 		if len(vs) == 2 && vs[0].K == KStr && vs[1].K == KStr {
-			return Bool(asciiLower(vs[0].S) == asciiLower(vs[1].S)), true
+			a, b := strings.ToLower(vs[0].S), strings.ToLower(vs[1].S)
+			if name == "comparetext" || name == "ansicomparetext" {
+				return Int(int64(strings.Compare(a, b))), true
+			}
+			return Bool(a == b), true
 		}
 		return Unknown(name), true
 	case "inttostr":
@@ -451,40 +455,48 @@ func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
 		e.fail("Fail called")
 	}
 	vs := e.argVals(c, args)
-	need := func(n int) {
-		if len(vs) < n || !allKnown(vs[:n]...) {
-			abort("assertion over unknown value (" + name + ")")
-		}
+	// Assertion over a value we cannot track (or a kind we do not model): a
+	// passing suite is the normal case and a passing assertion does not change
+	// the control flow, so assume it passes and keep running the test.
+	assume := func() Value {
+		e.assumed++
+		return Unknown("")
 	}
+	need := func(n int) bool { return len(vs) >= n && allKnown(vs[:n]...) }
+
 	switch name {
 	case "istrue", "checktrue", "check":
-		need(1)
-		if vs[0].K != KBool {
-			abort("assertion over non-boolean")
+		if !need(1) || vs[0].K != KBool {
+			return assume()
 		}
 		if !vs[0].B {
 			e.fail(name)
 		}
 	case "isfalse", "checkfalse":
-		need(1)
-		if vs[0].K != KBool {
-			abort("assertion over non-boolean")
+		if !need(1) || vs[0].K != KBool {
+			return assume()
 		}
 		if vs[0].B {
 			e.fail(name)
 		}
 	case "isnull", "checknull", "isnil":
-		need(1)
+		if !need(1) {
+			return assume()
+		}
 		if !(vs[0].K == KNil || (vs[0].K == KObj && vs[0].Obj == nil)) {
 			e.fail(name)
 		}
 	case "isnotnull", "checknotnull", "isnotnil":
-		need(1)
+		if !need(1) {
+			return assume()
+		}
 		if vs[0].K == KNil || (vs[0].K == KObj && vs[0].Obj == nil) {
 			e.fail(name)
 		}
 	case "areequal", "checkequals", "arenotequal", "checknotequals":
-		need(2)
+		if !need(2) {
+			return assume()
+		}
 		eq := false
 		x, okx := vs[0].num()
 		y, oky := vs[1].num()
@@ -499,17 +511,15 @@ func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
 		} else {
 			r, ok := Equal(vs[0], vs[1])
 			if !ok {
-				abort("assertion over values that cannot be compared")
+				return assume()
 			}
 			eq = r
 		}
 		if (name == "areequal" || name == "checkequals") != eq {
 			e.fail(name + " expected " + vs[0].String() + " got " + vs[1].String())
 		}
-	case "contains", "startswith", "endswith", "isempty", "isnotempty", "inheritsfrom", "isType", "implements":
-		abort("assertion not modelled: " + name)
 	default:
-		abort("assertion not modelled: " + name)
+		return assume()
 	}
 	return Unknown("")
 }

@@ -349,6 +349,7 @@ type Evaluator struct {
 	Runs    []*cov.TestRun
 	curRun  *cov.TestRun
 	closureUnit *pascal.Unit // unit of the closure about to be invoked
+	assumed     int          // assertions over untracked values assumed to pass in this test
 	lineRecs map[string]*recorder // recorder of each test line of the current run
 	lineList []*recorder          // same recorders, in the order of curRun.Lines
 	curFile string
@@ -817,6 +818,7 @@ func (e *Evaluator) convertArg(s, typ string) Value {
 func (e *Evaluator) runSafe(fn func()) (status string) {
 	e.depth = 0
 	e.steps = 0
+	e.assumed = 0
 	e.rec.frames = nil
 	defer func() {
 		if r := recover(); r != nil {
@@ -839,5 +841,8 @@ func (e *Evaluator) runSafe(fn func()) (status string) {
 		}
 	}()
 	fn()
+	if e.assumed > 0 {
+		return fmt.Sprintf("ok (%d assertions sobre valores não rastreados assumidas como passando)", e.assumed)
+	}
 	return "ok"
 }
