@@ -91,10 +91,17 @@ Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `B
 - **Condições `and`/`or`:** `False and ?` e `True or ?` são resolvidas mesmo com o outro lado desconhecido.
 - **Coleções:** `TList<T>`, `TObjectList<T>`, `TQueue<T>`, `TStack<T>`, `TDictionary<K,V>`, `TStringList` (Add, Count, Items, IndexOf, ContainsKey, TryGetValue, for-in...).
 
-## Limite
+## Condições que o BCov não consegue decidir
 
-O BCov mede se cada branch/condição foi **executada** pelos testes, não se o teste passa. Por isso:
+Quando um `if`, `case` ou `for` depende de algo que o BCov não enxerga (retorno de `Locate`, propriedade de objeto que o teste não configurou, chamada fora de `src` e `libs`), ele não chuta um lado. Faz o que as ferramentas de execução simbólica fazem (DART, KLEE): **executa o teste de novo por cada caminho possível** e usa os asserts do teste como oráculo. A suíte é considerada verde, então um caminho que quebra um `AreEqual` de valor conhecido, ou que levanta exceção inesperada, não é o que acontece de verdade e é descartado.
 
-- Assertion sobre valor que o interpretador não rastreia (`AreEqual(x, Obj.Valor)`) é assumida como passando e o teste segue.
-- Se um teste usa algo que o interpretador não conhece e a decisão depende disso (`if Query.Locate(...)`, `SameText(x, ...)` com `x` desconhecido), ele para e avisa no log (`parcial`). O que vem depois não conta. A cobertura sai menor que a real.
-- Campos de classes ancestrais que o BCov não lê, propriedades declaradas só na interface e `TXxx.Create` de classes externas (`TStringList`) são tratados normalmente.
+- **Garantida:** o que todos os caminhos restantes cobrem. É o número que vale para o mínimo e para o bloqueio.
+- **Possível:** o que só alguns caminhos cobrem. Aparece no log (`Cobertura possível`) e no banner do relatório, e não entra na conta do mínimo.
+
+Exemplo: `if FEmpresa.Tipo = tiCNPJ then Result := 1 else Result := 3` com `Assert.AreEqual(1, Sut.Codigo)` cobre o `then`, mesmo sem saber o tipo da empresa.
+
+Limites:
+- Cada teste explora no máximo 256 caminhos e 40 decisões desconhecidas por caminho. Se estourar, o log avisa `exploração truncada` e a cobertura daquele teste pode vir maior que a real.
+- Assertion sobre valor desconhecido é assumida como passando (cobertura mede execução, não resultado) e não descarta caminho.
+- Se o teste usa algo que o interpretador não entende de outro jeito, ele para e avisa no log (`parcial`); o que vem depois não conta.
+- Campos de ancestrais que o BCov não lê, propriedades declaradas só na interface e `TXxx.Create` de classes externas são tratados normalmente.

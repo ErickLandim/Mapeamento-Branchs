@@ -350,6 +350,9 @@ type Evaluator struct {
 	curRun  *cov.TestRun
 	closureUnit *pascal.Unit // unit of the closure about to be invoked
 	assumed     int          // assertions over untracked values assumed to pass in this test
+	ch          *chooser     // choices for undecidable conditions in the current path
+	// Possible is the coverage some compatible path reaches but not all of them
+	Possible *cov.Hits
 	lineRecs map[string]*recorder // recorder of each test line of the current run
 	lineList []*recorder          // same recorders, in the order of curRun.Lines
 	curFile string
@@ -702,88 +705,162 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 	}
 	cases := e.discover(tests)
 	fixtures := map[*ClassInfo]*Object{}
-	var all []*cov.Hits
+	var all, possible []*cov.Hits
 	for _, tc := range cases {
-		// every test records into its own recorder so each coverage item can
-		// be traced back to the tests that exercised it
-		e.rec, e.lineRecs, e.lineList = nil, map[string]*recorder{}, nil
-		run := &cov.TestRun{Name: tc.name}
-		if u := e.unitOf(tc.method); u != nil {
-			run.Unit, run.File = u.Name, u.Path
-			run.Line, run.EndLine = tc.method.Line, tc.method.Line
-			if tc.method.EndTok >= 0 && tc.method.EndTok < len(u.Toks) {
-				run.EndLine = u.Toks[tc.method.EndTok].Line
+		snap := e.snapshot(fixtures)
+		var script []int
+		var survivors []*pathResult
+		var first *pathResult
+		runs, truncated := 0, false
+		for {
+			if runs > 0 {
+				e.restore(snap, fixtures) // every path starts from the same world
+			}
+			pr := e.runPath(tc, fixtures, script)
+			runs++
+			if first == nil {
+				first = pr
+			}
+			if pr.survives() {
+				survivors = append(survivors, pr)
+			}
+			script = nextScript(pr.trail)
+			if script == nil {
+				break
+			}
+			if runs >= maxRuns {
+				truncated = true
+				break
 			}
 		}
-		e.curRun, e.curFile, e.curLine = run, run.File, run.Line
-		e.switchLine()
-		var self *Object
-		if tc.dunit {
-			self = e.newObject(tc.class)
-		} else {
-			self = fixtures[tc.class]
-			if self == nil {
-				self = e.newObject(tc.class)
-				fixtures[tc.class] = self
-				if r := tc.class.findMethod("create", 0); r != nil && r.Kind == "constructor" {
-					e.runSafe(func() { e.invoke(r, self, tc.class, nil, nil, nil) })
+		res, status := first, first.status
+		if runs > 1 {
+			if len(survivors) == 0 {
+				status = first.status + " [" + fmt.Sprint(runs) + " caminhos, nenhum compatível com os asserts]"
+			} else {
+				res = survivors[0]
+				var hs []*cov.Hits
+				for _, sv := range survivors {
+					hs = append(hs, sv.run.Hits)
 				}
-				// [SetupFixture]: once, before the fixture's first test
-				if tc.class.Decl != nil {
-					for _, m := range tc.class.Decl.Methods {
-						if len(attrNamed(tc.class.Decl.Attrs[m.Name], "setupfixture")) > 0 {
-							if r := tc.class.findMethod(m.Name, 0); r != nil {
-								e.runSafe(func() { e.invoke(r, self, tc.class, nil, nil, nil) })
-							}
-						}
-					}
+				certain := cov.Intersect(hs)
+				if len(survivors) > 1 {
+					possible = append(possible, cov.Merge(hs))
 				}
-			}
-		}
-		label := tc.name
-		var args []Value
-		if tc.args != nil {
-			args = e.testCaseArgs(tc)
-			run.Case = e.caseName(tc)
-			label += fmt.Sprintf("(%s)", run.Case)
-		}
-		e.curFile, e.curLine = run.File, run.Line
-		e.switchLine()
-		status := e.runSafe(func() {
-			for _, s := range tc.setup {
-				if s != nil {
-					e.invoke(s, self, tc.class, nil, nil, nil)
+				res.run.Hits = certain
+				for _, lh := range res.run.Lines {
+					lh.Hits = cov.Intersect([]*cov.Hits{lh.Hits, certain})
+				}
+				status = fmt.Sprintf("%s [%d caminhos explorados, %d compatíveis com os asserts]", res.status, runs, len(survivors))
+				if truncated {
+					status += " [exploração truncada]"
 				}
 			}
-			e.curFile, e.curLine = run.File, run.Line
-			e.switchLine()
-			e.invoke(tc.method, self, tc.class, nil, args, nil)
-			for _, s := range tc.teardown {
-				if s != nil {
-					e.invoke(s, self, tc.class, nil, nil, nil)
-				}
-			}
-		})
-		if strings.HasPrefix(status, "exceção") && e.exceptionExpected(tc, self) {
-			status = "ok (exceção esperada)"
 		}
-		var lines []*cov.Hits
-		for i, lh := range run.Lines {
-			lh.Hits = e.lineList[i].hits()
-			lines = append(lines, lh.Hits)
-		}
-		run.Hits = cov.Merge(lines)
-		e.curRun = nil
-		e.Runs = append(e.Runs, run)
-		all = append(all, run.Hits)
-		e.logf("test %s: %s", label, status)
+		e.Runs = append(e.Runs, res.run)
+		all = append(all, res.run.Hits)
+		e.logf("test %s: %s", res.label, status)
 	}
 	if len(cases) == 0 {
 		e.logf("WARN no tests found (DUnitX [Test]/[TestCase] methods or DUnit TTestCase descendants)")
 	}
 	h := cov.Merge(all)
 	h.Source = "bcovscan-static"
+	if len(possible) > 0 {
+		e.Possible = cov.Merge(append(append([]*cov.Hits{}, all...), possible...))
+	}
 	return h, e.log
+}
+
+// pathResult is one execution of a test along one script of choices.
+type pathResult struct {
+	run    *cov.TestRun
+	label  string
+	status string
+	trail  []choicePoint
+}
+
+// survives: a path on which a known assertion failed or an unexpected
+// exception was raised is not what happens in a green suite.
+func (p *pathResult) survives() bool {
+	return strings.HasPrefix(p.status, "ok") || strings.HasPrefix(p.status, "parcial")
+}
+
+// runPath runs one test once, taking the given choices at undecidable decisions.
+func (e *Evaluator) runPath(tc testCase, fixtures map[*ClassInfo]*Object, script []int) *pathResult {
+	e.ch = &chooser{script: script}
+	defer func() { e.ch = nil }()
+	// every test records into its own recorder so each coverage item can
+	// be traced back to the tests that exercised it
+	e.rec, e.lineRecs, e.lineList = nil, map[string]*recorder{}, nil
+	run := &cov.TestRun{Name: tc.name}
+	if u := e.unitOf(tc.method); u != nil {
+		run.Unit, run.File = u.Name, u.Path
+		run.Line, run.EndLine = tc.method.Line, tc.method.Line
+		if tc.method.EndTok >= 0 && tc.method.EndTok < len(u.Toks) {
+			run.EndLine = u.Toks[tc.method.EndTok].Line
+		}
+	}
+	e.curRun, e.curFile, e.curLine = run, run.File, run.Line
+	e.switchLine()
+	var self *Object
+	if tc.dunit {
+		self = e.newObject(tc.class)
+	} else {
+		self = fixtures[tc.class]
+		if self == nil {
+			self = e.newObject(tc.class)
+			fixtures[tc.class] = self
+			if r := tc.class.findMethod("create", 0); r != nil && r.Kind == "constructor" {
+				e.runSafe(func() { e.invoke(r, self, tc.class, nil, nil, nil) })
+			}
+			// [SetupFixture]: once, before the fixture's first test
+			if tc.class.Decl != nil {
+				for _, m := range tc.class.Decl.Methods {
+					if len(attrNamed(tc.class.Decl.Attrs[m.Name], "setupfixture")) > 0 {
+						if r := tc.class.findMethod(m.Name, 0); r != nil {
+							e.runSafe(func() { e.invoke(r, self, tc.class, nil, nil, nil) })
+						}
+					}
+				}
+			}
+		}
+	}
+	label := tc.name
+	var args []Value
+	if tc.args != nil {
+		args = e.testCaseArgs(tc)
+		run.Case = e.caseName(tc)
+		label += fmt.Sprintf("(%s)", run.Case)
+	}
+	e.curFile, e.curLine = run.File, run.Line
+	e.switchLine()
+	status := e.runSafe(func() {
+		for _, s := range tc.setup {
+			if s != nil {
+				e.invoke(s, self, tc.class, nil, nil, nil)
+			}
+		}
+		e.curFile, e.curLine = run.File, run.Line
+		e.switchLine()
+		e.invoke(tc.method, self, tc.class, nil, args, nil)
+		for _, s := range tc.teardown {
+			if s != nil {
+				e.invoke(s, self, tc.class, nil, nil, nil)
+			}
+		}
+	})
+	if strings.HasPrefix(status, "exceção") && e.exceptionExpected(tc, self) {
+		status = "ok (exceção esperada)"
+	}
+	var lines []*cov.Hits
+	for i, lh := range run.Lines {
+		lh.Hits = e.lineList[i].hits()
+		lines = append(lines, lh.Hits)
+	}
+	run.Hits = cov.Merge(lines)
+	e.curRun = nil
+	return &pathResult{run: run, label: label, status: status, trail: e.ch.trail}
 }
 
 // exceptionExpected: [WillRaise(E)] on a DUnitX test or ExpectedException /
