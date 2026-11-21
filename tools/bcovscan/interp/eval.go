@@ -136,6 +136,9 @@ func (e *Evaluator) evalBinary(c *ctx, x *pascal.Binary) Value {
 			return Unknown("boolean operand")
 		}
 		r := e.eval(c, x.R)
+		if r.K == KBool && ((x.Op == "and" && !r.B) || (x.Op == "or" && r.B)) && !l.Known() {
+			return Bool(r.B) // False and ?, True or ?
+		}
 		if l.K == KInt && r.K == KInt {
 			if x.Op == "and" {
 				return Int(l.I & r.I)
@@ -730,6 +733,25 @@ func (e *Evaluator) evalSel(c *ctx, x *pascal.Sel, args []pascal.Expr, isCall bo
 			return Str(strings.TrimSpace(recv.S))
 		case "isempty":
 			return Bool(recv.S == "")
+		case "equals", "startswith", "endswith", "contains", "indexof":
+			vs := e.argVals(c, args)
+			if len(vs) >= 1 && vs[0].K == KStr {
+				switch x.Name {
+				case "equals":
+					return Bool(recv.S == vs[0].S)
+				case "startswith":
+					return Bool(strings.HasPrefix(recv.S, vs[0].S))
+				case "endswith":
+					return Bool(strings.HasSuffix(recv.S, vs[0].S))
+				case "contains":
+					return Bool(strings.Contains(recv.S, vs[0].S))
+				}
+				if i := strings.Index(recv.S, vs[0].S); i >= 0 {
+					return Int(int64(len([]rune(recv.S[:i]))))
+				}
+				return Int(-1)
+			}
+			return Unknown("member " + x.Name)
 		}
 	case KNil:
 		e.raise("eaccessviolation", "Access violation (nil)")

@@ -11,6 +11,9 @@ inputs:
   tests:
     description: Pasta dos testes (sobrescreve o .bcov.yml)
     default: ""
+  libs:
+    description: Pasta de units de apoio, só interpretadas e fora do relatório (sobrescreve o .bcov.yml)
+    default: ""
   ignorar:
     description: "Regras para ignorar, separadas por vírgula (ex.: .dfm,legado/)"
     default: ""
@@ -49,6 +52,7 @@ runs:
         IN_CONFIG: ${{ inputs.config }}
         IN_SRC: ${{ inputs.src }}
         IN_TESTS: ${{ inputs.tests }}
+        IN_LIBS: ${{ inputs.libs }}
         IN_IGNORAR: ${{ inputs.ignorar }}
         IN_MODO: ${{ inputs.modo }}
         IN_METODOS: ${{ inputs.metodos }}
@@ -59,6 +63,7 @@ runs:
         [ -n "$IN_CONFIG" ]  && args+=(--config "$IN_CONFIG")
         [ -n "$IN_SRC" ]     && args+=(--src "$IN_SRC")
         [ -n "$IN_TESTS" ]   && args+=(--tests "$IN_TESTS")
+        [ -n "$IN_LIBS" ]    && args+=(--libs "$IN_LIBS")
         [ -n "$IN_MODO" ]    && args+=(--modo "$IN_MODO")
         [ -n "$IN_METODOS" ] && args+=(--metodos "$IN_METODOS")
         [ -n "$IN_MINIMO" ]  && args+=(--minimo "$IN_MINIMO")
