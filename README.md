@@ -18,7 +18,7 @@ Ou sem instalar, direto:
 npx github:ErickLandim/Mapeamento-Branchs --root C:\meu\projeto
 ```
 
-Só com Go: `go install github.com/ErickLandim/Mapeamento-Branchs/tools/bcovscan@latest` (o comando fica como `bcovscan run ...`). Repositório privado: precisa estar logado no git.
+Só com Go: `go install github.com/ErickLandim/Mapeamento-Branchs/tools/bcovscan@latest` (o comando fica como `bcovscan run ...`).
 
 ## Usar
 
@@ -64,7 +64,7 @@ jobs:
       - uses: ErickLandim/Mapeamento-Branchs@main
 ```
 
-Aceita `config`, `src`, `tests`, `ignorar`, `modo`, `metodos`, `minimo` e `base`. Repositório privado: libere em Settings > Actions > General > Access.
+Aceita `config`, `src`, `tests`, `ignorar`, `modo`, `metodos`, `minimo` e `base`.
 
 **GitLab:** suba este repositório como projeto de pipeline da empresa, troque uma vez o caminho `grupo/pipelines-bcov` em `bcov.gitlab-ci.yml` e, em cada projeto:
 
