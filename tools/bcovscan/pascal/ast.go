@@ -235,10 +235,12 @@ type MethodDecl struct {
 	IsVirtual  bool
 	IsClass    bool
 	Abstract   bool
+	Result     string // return type of a function, lower-case
 }
 
 type PropDecl struct {
 	Name  string
+	Type  string // lower-case
 	Read  string
 	Write string
 }
@@ -254,6 +256,8 @@ type ClassType struct {
 	IsRecord   bool
 	IsIntf     bool
 	Attrs      map[string][]AttrUse // method name -> attributes
+	ClassAttrs []AttrUse             // attributes of the type itself ([TestFixture])
+	HelperFor  string               // class/record helper for this type (lower-case)
 }
 
 type AttrUse struct {

@@ -349,6 +349,7 @@ type Evaluator struct {
 	Runs    []*cov.TestRun
 	curRun  *cov.TestRun
 	closureUnit *pascal.Unit // unit of the closure about to be invoked
+	assumed     int          // assertions over untracked values assumed to pass in this test
 	lineRecs map[string]*recorder // recorder of each test line of the current run
 	lineList []*recorder          // same recorders, in the order of curRun.Lines
 	curFile string
@@ -456,6 +457,21 @@ func New(a *pascal.Analysis, prod, tests []*pascal.Unit) *Evaluator {
 			e.routines[r.Name] = append(e.routines[r.Name], r)
 		}
 	}
+	// class helpers (often used to reach private members from tests): their
+	// methods become methods of the helped class
+	for _, ci := range e.classes {
+		if ci.Decl == nil || ci.Decl.HelperFor == "" {
+			continue
+		}
+		t := e.classes[ci.Decl.HelperFor]
+		if t == nil {
+			t = &ClassInfo{Name: ci.Decl.HelperFor, Methods: map[string][]*pascal.Routine{}, Builtin: true}
+			e.classes[ci.Decl.HelperFor] = t
+		}
+		for n, rs := range ci.Methods {
+			t.Methods[n] = rs // the helper method hides the class one
+		}
+	}
 	return e
 }
 
@@ -463,9 +479,22 @@ func (e *Evaluator) logf(format string, a ...any) {
 	e.log = append(e.log, fmt.Sprintf(format, a...))
 }
 
+// common RTL/VCL classes whose fields start nil (we do not parse their units)
+var nilByDefault = map[string]bool{
+	"tstringlist": true, "tstrings": true, "tlist": true, "tobjectlist": true, "tdictionary": true,
+	"tstream": true, "tmemorystream": true, "tfilestream": true, "tstringstream": true, "tcomponent": true,
+	"tdataset": true, "tclientdataset": true, "tfdquery": true, "tfdmemtable": true, "tquery": true,
+	"tform": true, "tpersistent": true, "tobject": true, "tthread": true, "tcollection": true,
+	"tcollectionitem": true, "tfield": true, "tinifile": true, "tregistry": true, "tjsonobject": true,
+	"tjsonarray": true, "tjsonvalue": true, "txmldocument": true, "tbytes": false,
+}
+
 // zero returns the zero value Delphi gives a field of the given type.
 func (e *Evaluator) zero(typ string) Value {
 	t := strings.ToLower(strings.TrimSpace(typ))
+	if intf, ok := mockTypeOf(t); ok {
+		return e.newMock(intf)
+	}
 	switch t {
 	case "integer", "int64", "cardinal", "byte", "word", "smallint", "shortint", "longint", "longword", "nativeint", "nativeuint", "uint64", "int32", "uint32":
 		return Int(0)
@@ -482,6 +511,9 @@ func (e *Evaluator) zero(typ string) Value {
 	if ci := e.classes[t]; ci != nil {
 		return Nil()
 	}
+	if nilByDefault[t] {
+		return Nil()
+	}
 	if strings.HasPrefix(t, "i") || strings.HasPrefix(t, "t") && e.classes[t] != nil {
 		return Nil()
 	}
@@ -496,6 +528,9 @@ func (e *Evaluator) zero(typ string) Value {
 // initialised by Delphi, others hold garbage).
 func (e *Evaluator) local(typ string) Value {
 	t := strings.ToLower(strings.TrimSpace(typ))
+	if intf, ok := mockTypeOf(t); ok {
+		return e.newMock(intf)
+	}
 	switch {
 	case t == "string" || t == "unicodestring" || t == "ansistring" || t == "widestring":
 		return Str("")
@@ -607,20 +642,36 @@ func (e *Evaluator) discover(tests []*pascal.Unit) []testCase {
 				}
 				continue
 			}
-			// DUnitX: methods with [Test]/[TestCase] attributes
+			// DUnitX: methods with [Test]/[TestCase] attributes; in a fixture,
+			// published parameterless procedures are tests too
 			var setup, teardown []*pascal.Routine
+			fixture := len(attrNamed(c.ClassAttrs, "testfixture")) > 0
 			for _, m := range c.Methods {
-				if len(attrNamed(c.Attrs[m.Name], "setup")) > 0 {
+				a := c.Attrs[m.Name]
+				if len(attrNamed(a, "setup")) > 0 {
 					setup = append(setup, ci.findMethod(m.Name, 0))
 				}
-				if len(attrNamed(c.Attrs[m.Name], "teardown")) > 0 {
+				if len(attrNamed(a, "teardown")) > 0 {
 					teardown = append(teardown, ci.findMethod(m.Name, 0))
+				}
+				if len(attrNamed(a, "test", "testcase", "setup", "teardown", "setupfixture", "teardownfixture")) > 0 {
+					fixture = true
 				}
 			}
 			for _, m := range c.Methods {
 				attrs := c.Attrs[m.Name]
 				cases := attrNamed(attrs, "testcase")
-				isTest := len(attrNamed(attrs, "test")) > 0 || len(cases) > 0
+				tests := attrNamed(attrs, "test")
+				isTest := len(tests) > 0 || len(cases) > 0
+				if !isTest && fixture && m.Visibility == "published" && m.Kind == "procedure" && m.NParams == 0 &&
+					len(attrNamed(attrs, "setup", "teardown", "setupfixture", "teardownfixture")) == 0 {
+					isTest = true
+				}
+				if len(tests) > 0 && len(tests[0].Args) > 0 { // [Test(False)]
+					if id, ok := tests[0].Args[0].(*pascal.Ident); ok && id.Name == "false" {
+						isTest = false
+					}
+				}
 				if !isTest || len(attrNamed(attrs, "ignore")) > 0 {
 					continue
 				}
@@ -677,6 +728,16 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 				if r := tc.class.findMethod("create", 0); r != nil && r.Kind == "constructor" {
 					e.runSafe(func() { e.invoke(r, self, tc.class, nil, nil, nil) })
 				}
+				// [SetupFixture]: once, before the fixture's first test
+				if tc.class.Decl != nil {
+					for _, m := range tc.class.Decl.Methods {
+						if len(attrNamed(tc.class.Decl.Attrs[m.Name], "setupfixture")) > 0 {
+							if r := tc.class.findMethod(m.Name, 0); r != nil {
+								e.runSafe(func() { e.invoke(r, self, tc.class, nil, nil, nil) })
+							}
+						}
+					}
+				}
 			}
 		}
 		label := tc.name
@@ -703,6 +764,9 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 				}
 			}
 		})
+		if strings.HasPrefix(status, "exceção") && e.exceptionExpected(tc, self) {
+			status = "ok (exceção esperada)"
+		}
 		var lines []*cov.Hits
 		for i, lh := range run.Lines {
 			lh.Hits = e.lineList[i].hits()
@@ -720,6 +784,20 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 	h := cov.Merge(all)
 	h.Source = "bcovscan-static"
 	return h, e.log
+}
+
+// exceptionExpected: [WillRaise(E)] on a DUnitX test or ExpectedException /
+// StartExpectingException in a DUnit test.
+func (e *Evaluator) exceptionExpected(tc testCase, self *Object) bool {
+	if tc.class.Decl != nil && len(attrNamed(tc.class.Decl.Attrs[tc.method.Name], "willraise")) > 0 {
+		return true
+	}
+	if self != nil {
+		if v := self.Fields["expectedexception"]; v != nil && v.K == KClass {
+			return true
+		}
+	}
+	return false
 }
 
 // switchLine records the hits of each line of test code apart, so a coverage item
@@ -817,6 +895,7 @@ func (e *Evaluator) convertArg(s, typ string) Value {
 func (e *Evaluator) runSafe(fn func()) (status string) {
 	e.depth = 0
 	e.steps = 0
+	e.assumed = 0
 	e.rec.frames = nil
 	defer func() {
 		if r := recover(); r != nil {
@@ -839,5 +918,8 @@ func (e *Evaluator) runSafe(fn func()) (status string) {
 		}
 	}()
 	fn()
+	if e.assumed > 0 {
+		return fmt.Sprintf("ok (%d assertions sobre valores não rastreados assumidas como passando)", e.assumed)
+	}
 	return "ok"
 }

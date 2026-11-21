@@ -198,10 +198,14 @@ func (e *Evaluator) builtin(c *ctx, name string, args []pascal.Expr) (Value, boo
 			return Str(strings.TrimRightFunc(vs[0].S, cut)), true
 		}
 		return Unknown(name), true
-	case "sametext":
+	case "sametext", "ansisametext", "comparetext", "ansicomparetext":
 		vs := e.argVals(c, args)
 		if len(vs) == 2 && vs[0].K == KStr && vs[1].K == KStr {
-			return Bool(asciiLower(vs[0].S) == asciiLower(vs[1].S)), true
+			a, b := strings.ToLower(vs[0].S), strings.ToLower(vs[1].S)
+			if name == "comparetext" || name == "ansicomparetext" {
+				return Int(int64(strings.Compare(a, b))), true
+			}
+			return Bool(a == b), true
 		}
 		return Unknown(name), true
 	case "inttostr":
@@ -390,10 +394,27 @@ func asciiLower(s string) string {
 
 // ---- assertions (DUnitX Assert.* and DUnit Check*) ----
 
+// assertAlias maps DUnit and FPCUnit assertion names to the DUnitX one with
+// the same meaning (argument order is expected, actual in all of them).
+var assertAlias = map[string]string{
+	"check": "istrue", "checktrue": "istrue", "asserttrue": "istrue",
+	"checkfalse": "isfalse", "assertfalse": "isfalse",
+	"checkequals": "areequal", "checkequalsstring": "areequal", "checkequalswidestring": "areequal", "assertequals": "areequal",
+	"checknotequals": "arenotequal", "checknotequalsstring": "arenotequal", "assertnotequals": "arenotequal",
+	"checknull": "isnull", "assertnull": "isnull", "checknotnull": "isnotnull", "assertnotnull": "isnotnull",
+	"checksame": "aresame", "assertsame": "aresame", "checknotsame": "arenotsame", "assertnotsame": "arenotsame",
+	"checkexception": "willraise", "assertexception": "assertexception",
+	"failequals": "fail", "failnotequals": "fail", "failnotsame": "fail",
+}
+
+// isAssertName: assertions called unqualified inside a DUnit / FPCUnit test.
 func isAssertName(n string) bool {
+	if _, ok := assertAlias[n]; ok {
+		return true
+	}
 	switch n {
-	case "check", "checkequals", "checknotequals", "checktrue", "checkfalse", "checknull", "checknotnull",
-		"checkexception", "fail", "checkis":
+	case "fail", "checkis", "checkinherits", "checkequalsmem", "checknotequalsmem", "checkequalsbin", "checkequalshex",
+		"startexpectingexception", "stopexpectingexception", "status":
 		return true
 	}
 	return false
@@ -401,16 +422,53 @@ func isAssertName(n string) bool {
 
 func (e *Evaluator) fail(msg string) { panic(&testFail{msg: msg}) }
 
+// methodRef evaluates the method argument of WillRaise/CheckException without
+// calling it: a bare method name (Executar, Self.Executar, FSut.Executar) is a
+// method pointer there, not a call.
+func (e *Evaluator) methodRef(c *ctx, a pascal.Expr) Value {
+	var o *Object
+	name := ""
+	switch x := a.(type) {
+	case *pascal.Ident:
+		if e.lookupVar(c, x.Name) == nil {
+			o, name = c.self, x.Name
+		}
+	case *pascal.Sel:
+		if v := e.eval(c, x.X); v.K == KObj && v.Obj != nil {
+			o, name = v.Obj, x.Name
+		}
+	}
+	if o != nil && name != "" {
+		if m := o.Class.findMethod(name, 0); m != nil {
+			return Value{K: KFunc, Fn: &Closure{R: m, Self: o, U: e.unitOf(m)}}
+		}
+	}
+	return e.eval(c, a)
+}
+
 // assertCall evaluates an assertion: a known failing assertion stops the test
 // like the real framework; an assertion over unknown values stops it too,
 // because we cannot tell whether the real test continues.
 func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
+	if a, ok := assertAlias[name]; ok {
+		name = a
+	}
 	switch name {
-	case "willraise", "willraiseany", "checkexception", "willnotraise", "willraisewithmessage":
+	case "startexpectingexception":
+		vs := e.argVals(c, args)
+		if len(vs) == 1 && vs[0].K == KClass && c.self != nil {
+			v := vs[0]
+			c.self.Fields["expectedexception"] = &v
+		}
+		return Unknown("")
+	case "stopexpectingexception", "status", "notimplemented":
+		e.argVals(c, args)
+		return Unknown("")
+	case "willraise", "willraiseany", "willnotraise", "willnotraiseany", "willraisewithmessage", "willraisedescendant", "willnotraisedescendant":
 		if len(args) == 0 {
 			abort("assertion without arguments")
 		}
-		fn := e.eval(c, args[0])
+		fn := e.methodRef(c, args[0])
 		if fn.K != KFunc || fn.Fn == nil {
 			abort("exception assertion over unmodelled method")
 		}
@@ -428,7 +486,7 @@ func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
 			e.closureUnit = fn.Fn.U
 			e.invokeIn(fn.Fn.R, fn.Fn.Self, nil, c, nil, nil, fn.Fn.Env)
 		}()
-		if name == "willnotraise" {
+		if strings.HasPrefix(name, "willnotraise") {
 			if raised != nil {
 				e.fail("unexpected exception " + raised.className())
 			}
@@ -451,40 +509,48 @@ func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
 		e.fail("Fail called")
 	}
 	vs := e.argVals(c, args)
-	need := func(n int) {
-		if len(vs) < n || !allKnown(vs[:n]...) {
-			abort("assertion over unknown value (" + name + ")")
-		}
+	// Assertion over a value we cannot track (or a kind we do not model): a
+	// passing suite is the normal case and a passing assertion does not change
+	// the control flow, so assume it passes and keep running the test.
+	assume := func() Value {
+		e.assumed++
+		return Unknown("")
 	}
+	need := func(n int) bool { return len(vs) >= n && allKnown(vs[:n]...) }
+
 	switch name {
 	case "istrue", "checktrue", "check":
-		need(1)
-		if vs[0].K != KBool {
-			abort("assertion over non-boolean")
+		if !need(1) || vs[0].K != KBool {
+			return assume()
 		}
 		if !vs[0].B {
 			e.fail(name)
 		}
 	case "isfalse", "checkfalse":
-		need(1)
-		if vs[0].K != KBool {
-			abort("assertion over non-boolean")
+		if !need(1) || vs[0].K != KBool {
+			return assume()
 		}
 		if vs[0].B {
 			e.fail(name)
 		}
 	case "isnull", "checknull", "isnil":
-		need(1)
+		if !need(1) {
+			return assume()
+		}
 		if !(vs[0].K == KNil || (vs[0].K == KObj && vs[0].Obj == nil)) {
 			e.fail(name)
 		}
 	case "isnotnull", "checknotnull", "isnotnil":
-		need(1)
+		if !need(1) {
+			return assume()
+		}
 		if vs[0].K == KNil || (vs[0].K == KObj && vs[0].Obj == nil) {
 			e.fail(name)
 		}
 	case "areequal", "checkequals", "arenotequal", "checknotequals":
-		need(2)
+		if !need(2) {
+			return assume()
+		}
 		eq := false
 		x, okx := vs[0].num()
 		y, oky := vs[1].num()
@@ -496,20 +562,61 @@ func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
 				}
 			}
 			eq = math.Abs(x-y) <= tol
+		} else if vs[0].K == KStr && vs[1].K == KStr && len(vs) > 2 && vs[2].K == KBool && vs[2].B {
+			eq = strings.EqualFold(vs[0].S, vs[1].S) // AreEqual(a, b, IgnoreCase = True)
 		} else {
 			r, ok := Equal(vs[0], vs[1])
 			if !ok {
-				abort("assertion over values that cannot be compared")
+				return assume()
 			}
 			eq = r
 		}
 		if (name == "areequal" || name == "checkequals") != eq {
 			e.fail(name + " expected " + vs[0].String() + " got " + vs[1].String())
 		}
-	case "contains", "startswith", "endswith", "isempty", "isnotempty", "inheritsfrom", "isType", "implements":
-		abort("assertion not modelled: " + name)
+	case "aresame", "arenotsame":
+		if !need(2) || vs[0].K != KObj || vs[1].K != KObj {
+			return assume()
+		}
+		if (vs[0].Obj == vs[1].Obj) != (name == "aresame") {
+			e.fail(name)
+		}
+	case "contains", "doesnotcontain", "startswith", "endswith":
+		// DUnitX: Contains(theString, subString), StartsWith/EndsWith(subString,
+		// theString); ignoreCase defaults to True
+		if !need(2) || vs[0].K != KStr || vs[1].K != KStr {
+			return assume()
+		}
+		s, sub := vs[0].S, vs[1].S
+		if name == "startswith" || name == "endswith" {
+			s, sub = sub, s
+		}
+		if len(vs) < 3 || vs[2].K != KBool || vs[2].B {
+			s, sub = strings.ToLower(s), strings.ToLower(sub)
+		}
+		var ok bool
+		switch name {
+		case "contains":
+			ok = strings.Contains(s, sub)
+		case "doesnotcontain":
+			ok = !strings.Contains(s, sub)
+		case "startswith":
+			ok = strings.HasPrefix(s, sub)
+		default:
+			ok = strings.HasSuffix(s, sub)
+		}
+		if !ok {
+			e.fail(name)
+		}
+	case "isempty", "isnotempty":
+		if !need(1) || vs[0].K != KStr {
+			return assume()
+		}
+		if (vs[0].S == "") != (name == "isempty") {
+			e.fail(name)
+		}
 	default:
-		abort("assertion not modelled: " + name)
+		return assume()
 	}
 	return Unknown("")
 }
