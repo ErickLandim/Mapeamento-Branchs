@@ -18,7 +18,7 @@ type Config struct {
 	Minimo     float64  // % mínima de cobertura; só vale se MinimoSet
 	MinimoSet  bool
 	Base       string   // branch/commit base do diff (padrão: detectado do MR)
-	BloquearEm []string // branches alvo do MR que bloqueiam (padrão: integration*, develop*, release*)
+	BloquearEm []string // branches alvo do MR que bloqueiam (padrão: main, master, integration*, develop*, release*)
 	Saida      string
 }
 
@@ -28,7 +28,7 @@ func defaultConfig() *Config {
 		Tests:      []string{"tests"},
 		Modo:       "tudo",
 		Metodos:    "novos",
-		BloquearEm: []string{"integration*", "develop*", "release*"},
+		BloquearEm: []string{"main", "master", "integration*", "develop*", "release*"},
 		Saida:      ".bcov/relatorio",
 	}
 }

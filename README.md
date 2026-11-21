@@ -34,7 +34,7 @@ metodos: novos           # novos | alterados   (só no modo diff)
 | `modo` | `tudo` (padrão), `diff` | `tudo` analisa o projeto inteiro; `diff` só o que o MR mudou |
 | `metodos` | `novos` (padrão), `alterados` | no `diff`: só métodos que não existiam na base, ou também os existentes que o MR mexeu |
 | `minimo` | número | cobertura mínima em %. Padrão: 100 no modo `diff`, sem mínimo no modo `tudo` |
-| `bloquear_em` | lista | MR para essas branches é bloqueado. Padrão: `integration*`, `develop*`, `release*` |
+| `bloquear_em` | lista | MR para essas branches é bloqueado. Padrão: `main`, `master`, `integration*`, `develop*`, `release*` |
 | `base` | branch | base do diff. Padrão: o alvo do MR |
 
 ### Modo diff e métodos existentes
@@ -48,7 +48,7 @@ metodos: novos           # novos | alterados   (só no modo diff)
 Depende do alvo do MR:
 
 - MR da task para a feature: se a cobertura ficar abaixo do mínimo, o job termina com **aviso** e passa.
-- MR da feature para `integration*`, `develop*` ou `release*`: abaixo do mínimo o job **falha e bloqueia o MR**.
+- MR da feature para `main`, `master`, `integration*`, `develop*` ou `release*`: abaixo do mínimo o job **falha e bloqueia o MR**.
 
 O alvo é lido do pipeline (`CI_MERGE_REQUEST_TARGET_BRANCH_NAME` no GitLab, `GITHUB_BASE_REF` no GitHub). Sem alvo conhecido (execução local ou manual), só avisa.
 

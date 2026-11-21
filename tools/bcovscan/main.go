@@ -46,7 +46,7 @@ func usage() {
   --minimo N          cobertura mínima em % (padrão: 100 no modo diff)
   --base REF          branch base do diff (padrão: detectada do MR)
   --alvo BRANCH       branch alvo do MR (padrão: detectada do pipeline)
-  --bloquear-em LISTA alvos que bloqueiam o MR (padrão: integration*,develop*,release*)
+  --bloquear-em LISTA alvos que bloqueiam o MR (padrão: main,master,integration*,develop*,release*)
   --out PASTA         saída (padrão: .bcov/relatorio)
 
   uso local, para olhar só uma parte:
