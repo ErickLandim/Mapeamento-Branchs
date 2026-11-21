@@ -1,10 +1,10 @@
-// bcovscan - branch coverage for Delphi without the Delphi compiler.
+// bcovscan - cobertura de branches para Delphi, sem o compilador Delphi.
 //
-//	bcovscan instrument --root R --src DIR... --out OUT   instrumented copy + bcov.map.json
-//	bcovscan scan --root R --src DIR... --tests DIR... --out OUT   static coverage (no compiler)
-//	bcovscan report --map M --hits H [--hits H2] --out DIR         report from runtime hits
-//	bcovscan report --root R --src DIR --hits H --out DIR          same, map rebuilt from the sources
-//	bcovscan compare --a coverage.json --b coverage.json           compare two reports
+// Lê o código de produção e os testes (DUnit/DUnitX), executa os testes com um
+// interpretador e gera um relatório HTML único mais coverage.json, cobertura.xml
+// e coverage.txt. Pode analisar o projeto inteiro ou só o diff do MR.
+//
+//	bcovscan run [--config .bcov.yml] [flags]
 package main
 
 import (
@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 2 || os.Args[1] != "run" {
 		usage()
 	}
 	if p := os.Getenv("BCOV_CPUPROFILE"); p != "" {
@@ -23,22 +23,7 @@ func main() {
 			defer pprof.StopCPUProfile()
 		}
 	}
-	var err error
-	switch os.Args[1] {
-	case "instrument":
-		err = cmdInstrument(os.Args[2:])
-	case "scan":
-		err = cmdScan(os.Args[2:])
-	case "report":
-		err = cmdReport(os.Args[2:])
-	case "compare":
-		err = cmdCompare(os.Args[2:])
-	case "check":
-		err = cmdCheck(os.Args[2:])
-	default:
-		usage()
-	}
-	if err != nil {
+	if err := cmdRun(os.Args[2:]); err != nil {
 		pprof.StopCPUProfile()
 		fmt.Fprintln(os.Stderr, "bcovscan:", err)
 		os.Exit(1)
@@ -46,11 +31,25 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, `usage:
-  bcovscan instrument --root R --src DIR [--src DIR] --out OUT
-  bcovscan scan       --root R --src DIR --tests DIR --out OUT [--detail] [--min-branch N]
-  bcovscan report     (--map M | --root R --src DIR) --hits H [--hits H2] --out DIR [--detail] [--min-branch N]
-  bcovscan compare    --a A.json --b B.json
-  bcovscan check      --report coverage.json --expected expected.json`)
+	fmt.Fprintln(os.Stderr, `uso: bcovscan run [opções]
+
+  Lê o .bcov.yml da raiz do projeto (todas as chaves são opcionais). As opções
+  abaixo sobrescrevem o arquivo.
+
+  --root PASTA        raiz do projeto (padrão: .)
+  --config ARQUIVO    outro arquivo de configuração
+  --src PASTA         código de produção (repetível)
+  --tests PASTA       testes (repetível)
+  --ignorar REGRA     extensão (.dfm), pasta (legado/) ou padrão (*Gerado*) (repetível)
+  --modo tudo|diff    projeto inteiro ou só o diff do MR
+  --metodos novos|alterados   no modo diff: só métodos novos, ou também os alterados
+  --minimo N          cobertura mínima em % (padrão: 100 no modo diff)
+  --base REF          branch base do diff (padrão: detectada do MR)
+  --alvo BRANCH       branch alvo do MR (padrão: detectada do pipeline)
+  --bloquear-em LISTA alvos que bloqueiam o MR (padrão: integration*,develop*,release*)
+  --out PASTA         saída (padrão: .bcov/relatorio)
+
+  uso local, para olhar só uma parte:
+  --unit U  --class C  --method M  --line N`)
 	os.Exit(2)
 }

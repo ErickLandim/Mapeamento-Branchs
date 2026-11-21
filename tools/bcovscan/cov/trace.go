@@ -19,6 +19,13 @@ type CallSite struct {
 	Line int
 }
 
+// LineHits are the hits produced while one line of test code was running.
+type LineHits struct {
+	File string
+	Line int
+	Hits *Hits
+}
+
 // TestRun is one executed test (one TestCase row counts as its own run) with
 // the coverage it produced on its own.
 type TestRun struct {
@@ -29,6 +36,7 @@ type TestRun struct {
 	Line    int    // first line of the test method
 	EndLine int    // last line of the test method
 	Hits    *Hits
+	Lines   []*LineHits        // the same hits split by the test line that produced them
 	Calls   map[int][]CallSite // production method id -> test lines that reached it
 }
 
@@ -125,7 +133,7 @@ func sumOf(s Summary) map[string][2]int {
 // span maps a method id to its first and last source line. mixed means the
 // numbers come from real execution while the test links come from the static
 // interpreter: an item is only linked to tests when the real run covered it too.
-func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span map[int][2]int, mixed bool) error {
+func RenderTrace(root string, rep *Report, m *Map, runs []*TestRun, span map[int][2]int, mixed bool) ([]byte, error) {
 	rel := func(p string) string {
 		if r, err := filepath.Rel(root, p); err == nil {
 			return filepath.ToSlash(r)
@@ -154,9 +162,9 @@ func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span ma
 		runCard[i] = ci
 	}
 	// which tests cover each item (items come out in the same order for any hits)
-	cover := make([][][]int, len(rep.Methods))
+	cover := make([][][][2]int, len(rep.Methods)) // item -> (card, test line) pairs
 	for mi, mr := range rep.Methods {
-		cover[mi] = make([][]int, len(mr.Items))
+		cover[mi] = make([][][2]int, len(mr.Items))
 	}
 	// recompute each test only over the methods it entered
 	mIdx := map[int]int{}
@@ -172,31 +180,44 @@ func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span ma
 		decsOf[dc.Method] = append(decsOf[dc.Method], dc)
 	}
 	for i, r := range runs {
-		if r.Hits == nil {
-			continue
-		}
-		sub := &Map{Version: m.Version, Files: m.Files}
-		for _, row := range r.Hits.Meth {
-			if row[1] > 0 {
-				if mm, ok := methByID[int(row[0])]; ok {
-					sub.Methods = append(sub.Methods, mm)
-					sub.Decisions = append(sub.Decisions, decsOf[mm.ID]...)
-				}
-			}
-		}
-		rr := Compute(sub, Merge([]*Hits{r.Hits}))
-		for _, mr := range rr.Methods {
-			mi, ok := mIdx[mr.ID]
-			if !ok || len(mr.Items) != len(cover[mi]) {
+		for _, lh := range r.Lines {
+			if lh.Hits == nil {
 				continue
 			}
-			for ii, it := range mr.Items {
-				if !it.Covered || !rep.Methods[mi].Items[ii].Covered {
+			line := lh.Line
+			if lh.File != r.File {
+				line = 0 // came from another file (helper, setup): the arrow goes to the card title
+			}
+			sub := &Map{Version: m.Version, Files: m.Files}
+			for _, row := range lh.Hits.Meth {
+				if row[1] > 0 {
+					if mm, ok := methByID[int(row[0])]; ok {
+						sub.Methods = append(sub.Methods, mm)
+						sub.Decisions = append(sub.Decisions, decsOf[mm.ID]...)
+					}
+				}
+			}
+			rr := Compute(sub, Merge([]*Hits{lh.Hits}))
+			for _, mr := range rr.Methods {
+				mi, ok := mIdx[mr.ID]
+				if !ok || len(mr.Items) != len(cover[mi]) {
 					continue
 				}
-				c := cover[mi][ii]
-				if n := len(c); n == 0 || c[n-1] != runCard[i] {
-					cover[mi][ii] = append(c, runCard[i])
+				for ii, it := range mr.Items {
+					if !it.Covered || !rep.Methods[mi].Items[ii].Covered {
+						continue
+					}
+					p := [2]int{runCard[i], line}
+					dup := false
+					for _, q := range cover[mi][ii] {
+						if q == p {
+							dup = true
+							break
+						}
+					}
+					if !dup {
+						cover[mi][ii] = append(cover[mi][ii], p)
+					}
 				}
 			}
 		}
@@ -205,7 +226,7 @@ func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span ma
 		Files: map[string][]string{}, Cards: cards, Total: sumOf(rep.Total), Tests: len(cards), Linked: len(runs) > 0, Mixed: mixed}
 	unitIdx := map[string]*traceUnit{}
 	for mi, mr := range rep.Methods {
-		if len(mr.Items) == 0 {
+		if mr.Hidden || len(mr.Items) == 0 {
 			continue
 		}
 		u := unitIdx[mr.File]
@@ -223,9 +244,20 @@ func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span ma
 			Sum: sumOf(mr.Summary), Items: [][]any{}, Reach: map[int][]int{}, Extra: map[int][]string{}}
 		hiddenBudget := 25
 		for ii, it := range mr.Items {
-			ids := cover[mi][ii]
-			if ids == nil {
-				ids = []int{}
+			if it.Out {
+				continue
+			}
+			pairs := cover[mi][ii]
+			if pairs == nil {
+				pairs = [][2]int{}
+			}
+			ids := []int{}
+			seen := map[int]bool{}
+			for _, p := range pairs {
+				if !seen[p[0]] {
+					seen[p[0]] = true
+					ids = append(ids, p[0])
+				}
 			}
 			if it.Category == CatPath && !it.Covered {
 				if hiddenBudget == 0 {
@@ -234,7 +266,7 @@ func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span ma
 				}
 				hiddenBudget--
 			}
-			tm.Items = append(tm.Items, []any{it.Line, it.Category, it.Kind, it.Label, it.Count, ids})
+			tm.Items = append(tm.Items, []any{it.Line, it.Category, it.Kind, it.Label, it.Count, ids, pairs})
 		}
 		for i, r := range runs {
 			if mr.Calls == 0 {
@@ -268,14 +300,10 @@ func WriteTrace(path, root string, rep *Report, m *Map, runs []*TestRun, span ma
 	}
 	data, err := json.Marshal(d)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	js := "[" + strings.ReplaceAll(string(data), "</", "<\\/") + "]"
-	page := strings.Replace(traceTpl, "__DATA__", js, 1)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(page), 0o644)
+	return []byte(strings.Replace(traceTpl, "__DATA__", js, 1)), nil
 }
 
 //go:embed trace.html

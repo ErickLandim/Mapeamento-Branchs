@@ -348,6 +348,9 @@ type Evaluator struct {
 	// statement that is executing (where production calls originate)
 	Runs    []*cov.TestRun
 	curRun  *cov.TestRun
+	closureUnit *pascal.Unit // unit of the closure about to be invoked
+	lineRecs map[string]*recorder // recorder of each test line of the current run
+	lineList []*recorder          // same recorders, in the order of curRun.Lines
 	curFile string
 	curLine int
 }
@@ -652,7 +655,7 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 	for _, tc := range cases {
 		// every test records into its own recorder so each coverage item can
 		// be traced back to the tests that exercised it
-		e.rec = newRecorder()
+		e.rec, e.lineRecs, e.lineList = nil, map[string]*recorder{}, nil
 		run := &cov.TestRun{Name: tc.name}
 		if u := e.unitOf(tc.method); u != nil {
 			run.Unit, run.File = u.Name, u.Path
@@ -662,6 +665,7 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 			}
 		}
 		e.curRun, e.curFile, e.curLine = run, run.File, run.Line
+		e.switchLine()
 		var self *Object
 		if tc.dunit {
 			self = e.newObject(tc.class)
@@ -683,6 +687,7 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 			label += fmt.Sprintf("(%s)", run.Case)
 		}
 		e.curFile, e.curLine = run.File, run.Line
+		e.switchLine()
 		status := e.runSafe(func() {
 			for _, s := range tc.setup {
 				if s != nil {
@@ -690,6 +695,7 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 				}
 			}
 			e.curFile, e.curLine = run.File, run.Line
+			e.switchLine()
 			e.invoke(tc.method, self, tc.class, nil, args, nil)
 			for _, s := range tc.teardown {
 				if s != nil {
@@ -697,7 +703,12 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 				}
 			}
 		})
-		run.Hits = e.rec.hits()
+		var lines []*cov.Hits
+		for i, lh := range run.Lines {
+			lh.Hits = e.lineList[i].hits()
+			lines = append(lines, lh.Hits)
+		}
+		run.Hits = cov.Merge(lines)
 		e.curRun = nil
 		e.Runs = append(e.Runs, run)
 		all = append(all, run.Hits)
@@ -709,6 +720,24 @@ func (e *Evaluator) RunTests() (*cov.Hits, []string) {
 	h := cov.Merge(all)
 	h.Source = "bcovscan-static"
 	return h, e.log
+}
+
+// switchLine records the hits of each line of test code apart, so a coverage item
+// can be tied to the exact test line that produced it. It only switches between
+// statements (no production method running), so call frames never change recorder.
+func (e *Evaluator) switchLine() {
+	if e.curRun == nil || (e.rec != nil && len(e.rec.frames) > 0) {
+		return
+	}
+	key := fmt.Sprintf("%s:%d", e.curFile, e.curLine)
+	r := e.lineRecs[key]
+	if r == nil {
+		r = newRecorder()
+		e.lineRecs[key] = r
+		e.lineList = append(e.lineList, r)
+		e.curRun.Lines = append(e.curRun.Lines, &cov.LineHits{File: e.curFile, Line: e.curLine})
+	}
+	e.rec = r
 }
 
 func (e *Evaluator) caseName(tc testCase) string {

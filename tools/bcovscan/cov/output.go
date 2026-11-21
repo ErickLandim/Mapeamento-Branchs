@@ -1,7 +1,7 @@
 package cov
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"html/template"
@@ -60,20 +60,11 @@ tr.c td:first-child{color:var(--ok)}tr.u{background:var(--lowb)}tr.u td:first-ch
 </details>{{end}}{{end}}
 </body></html>`))
 
-func WriteHTML(path string, r *Report) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	w := bufio.NewWriter(f)
-	if err := htmlTpl.Execute(w, map[string]any{"R": r, "When": time.Now().Format("2006-01-02 15:04"), "Sources": strings.Join(r.Sources, ", ")}); err != nil {
-		return err
-	}
-	return w.Flush()
+// RenderHTML devolve a página técnica de cobertura (aba "Cobertura").
+func RenderHTML(r *Report) ([]byte, error) {
+	var buf bytes.Buffer
+	err := htmlTpl.Execute(&buf, map[string]any{"R": r, "When": time.Now().Format("2006-01-02 15:04"), "Sources": strings.Join(r.Sources, ", ")})
+	return buf.Bytes(), err
 }
 
 // Cobertura XML (GitLab coverage visualization). Each decision line is a

@@ -1,11 +1,9 @@
 package cov
 
 import (
-	"bufio"
+	"bytes"
 	"fmt"
 	"html/template"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -161,14 +159,14 @@ code{font-size:14px;word-break:break-word}ul{margin:4px 0 0;padding-left:18px}li
 <td><code>{{.Name}}</code><br><span class="mut">{{.File}}:{{.Line}}</span></td>
 <td class="p"><span class="{{cls .Percent .Total}}">{{pct .Percent}}</span> <span class="mut">{{.Covered}}/{{.Total}}</span><div class="bar {{cls .Percent .Total}}"><i style="{{width .Percent}}"></i></div></td>
 <td>{{if eq .Calls 0}}<b class="low">Nenhum teste chamou este método.</b>{{end}}
-{{if .Missing}}<ul>{{range .Missing}}<li>{{.}}</li>{{end}}{{if .MorePaths}}<li class="mut">e mais {{.MorePaths}} combinações entre ifs não testadas (ver coverage.html)</li>{{end}}</ul>{{else}}<span class="ok">Tudo coberto.</span>{{end}}
+{{if .Missing}}<ul>{{range .Missing}}<li>{{.}}</li>{{end}}{{if .MorePaths}}<li class="mut">e mais {{.MorePaths}} combinações entre ifs não testadas (ver a aba Cobertura)</li>{{end}}</ul>{{else}}<span class="ok">Tudo coberto.</span>{{end}}
 {{if .Impossible}}<div class="mut">{{.Impossible}} combinações impossíveis ignoradas{{if eq .PathMode "pairs"}}; muitas combinações: contadas em pares de ifs{{end}}.</div>{{else if eq .PathMode "pairs"}}<div class="mut">Muitas combinações: contadas em pares de ifs.</div>{{end}}</td>
 </tr>{{end}}
 </table></div>
 </body></html>`))
 
-// WriteResumo writes the simple per-method summary.
-func WriteResumo(path string, r *Report, m *Map) error {
+// RenderResumo devolve o resumo simples por método (aba "Resumo").
+func RenderResumo(r *Report, m *Map) ([]byte, error) {
 	byID := map[int]MapDecision{}
 	for _, d := range m.Decisions {
 		byID[d.ID] = d
@@ -199,19 +197,8 @@ func WriteResumo(path string, r *Report, m *Map) error {
 		}
 		rows = append(rows, row)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	w := bufio.NewWriter(f)
-	err = resumoTpl.Execute(w, map[string]any{"When": time.Now().Format("2006-01-02 15:04"), "All": r.Total.All, "T": r.Total,
+	var buf bytes.Buffer
+	err := resumoTpl.Execute(&buf, map[string]any{"When": time.Now().Format("2006-01-02 15:04"), "All": r.Total.All, "T": r.Total,
 		"Methods": rows, "Impossible": impossible})
-	if err != nil {
-		return err
-	}
-	return w.Flush()
+	return buf.Bytes(), err
 }

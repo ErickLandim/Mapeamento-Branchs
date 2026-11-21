@@ -95,6 +95,9 @@ const HUES=[210,230,255,275,295,315,335,190,45,60];
 const col=id=>'hsl('+HUES[id%HUES.length]+',70%,'+(52+Math.floor(id/HUES.length)%3*7)+'%)';
 // coberto = executado ao menos uma vez (não depende de haver teste ligado, que só existe no modo scan)
 const cob=it=>it[4]>0;
+// chave de um vínculo: card e linha do teste que cobriu o item
+const ks=it=>(it[6]||[]).map(p=>p[0]+'|'+p[1]);
+const kc=k=>+k.split('|')[0];
 const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1):s;
 const plural=(n,s,p)=>n+' '+(n==1?s:p);
 const pc=a=>a[1]==0?100:a[0]*100/a[1];
@@ -129,7 +132,7 @@ function renderMethod(mt,file,box){
     it[5].forEach(c=>cardsUsed.add(c));
     if(it[1]=='path')return;
     (byLine[it[0]]=byLine[it[0]]||[]).push(it);
-    it[5].forEach(c=>{(lineCards[it[0]]=lineCards[it[0]]||new Set()).add(c)});
+    (it[6]||[]).forEach(p=>{(lineCards[it[0]]=lineCards[it[0]]||new Map()).set(p[0]+'|'+p[1],p)});
   });
   Object.keys(mt.reach).forEach(c=>cardsUsed.add(+c));
   const rows={};
@@ -154,7 +157,7 @@ function renderMethod(mt,file,box){
       tr.innerHTML='<td>'+(cob(i)?'✔':'✘')+'</td><td>'+esc(i[3])+'</td><td>'+
         (i[5].length?i[5].map(c=>'<span class="tag" style="border-color:'+col(c)+'">'+esc(cname(c))+'</span>').join(''):(cob(i)?'':'<span class="none">'+(D.linked?'Nenhum teste':'Não coberto')+'</span>'))+'</td>';
       const lines=new Set([...i[3].matchAll(/L(\d+)/g)].map(x=>+x[1]));
-      const set=new Set(i[5]);
+      const set=new Set(ks(i));
       tr.addEventListener('mouseenter',()=>hover(lines,set));
       tr.addEventListener('mouseleave',()=>hover(lines,null));
       tr.addEventListener('click',e=>{e.stopPropagation();pin('p|'+ix,lines,set)});
@@ -213,9 +216,9 @@ function renderMethod(mt,file,box){
       return s;
     };
     for(const it of its){
-      if(it[1]=='combination'){combo[1]++;if(cob(it)){combo[0]++;it[5].forEach(c=>cset.add(c))}continue}
+      if(it[1]=='combination'){combo[1]++;if(cob(it)){combo[0]++;ks(it).forEach(k=>cset.add(k))}continue}
       const txt=it[1]=='condition'?it[3]:it[2]=='method'?'Nenhum bloco entrou':cap(it[3]);
-      out.push(mk((cob(it)?'✔ ':'✘ ')+short(txt,26),cob(it),itemText(it)+(cob(it)?'':(D.linked?' - nenhum teste cobre':' - não coberto')),new Set(it[5])));
+      out.push(mk((cob(it)?'✔ ':'✘ ')+short(txt,26),cob(it),itemText(it)+(cob(it)?'':(D.linked?' - nenhum teste cobre':' - não coberto')),new Set(ks(it))));
     }
     if(combo[1])out.push(mk('Combinações '+combo[0]+'/'+combo[1],combo[0]==combo[1],'Combinações de condições',cset));
     return out;
@@ -244,17 +247,20 @@ function renderMethod(mt,file,box){
           row.appendChild(head);
           if(it[5].length){
             it[5].forEach(c=>{
-              const t=el('span','tag',esc(cname(c))+' <span class="mut">'+esc(D.cards[c].file.split('/').pop())+':'+((mt.reach[c]||[D.cards[c].line])[0])+'</span>');
+              const mine=(it[6]||[]).filter(p=>p[0]==c);
+              const ls=mine.map(p=>p[1]).filter(l=>l>0);
+              const cset=new Set(mine.map(p=>p[0]+'|'+p[1]));
+              const t=el('span','tag',esc(cname(c))+' <span class="mut">'+esc(D.cards[c].file.split('/').pop())+':'+(ls.length?ls.join(', '):D.cards[c].line)+'</span>');
               t.style.borderColor=col(c);t.dataset.pk=ik+'|'+c;
-              t.addEventListener('mouseenter',e=>{e.stopPropagation();hover(n,new Set([c]))});
-              t.addEventListener('mouseleave',e=>{e.stopPropagation();hover(n,new Set(it[5]))});
-              t.addEventListener('click',e=>{e.stopPropagation();pin(ik+'|'+c,n,new Set([c]))});
+              t.addEventListener('mouseenter',e=>{e.stopPropagation();hover(n,cset)});
+              t.addEventListener('mouseleave',e=>{e.stopPropagation();hover(n,new Set(ks(it)))});
+              t.addEventListener('click',e=>{e.stopPropagation();pin(ik+'|'+c,n,cset)});
               row.appendChild(t);
             });
           }else if(!cob(it))row.appendChild(el('span','none',D.linked?'Nenhum teste cobre':'Não coberto'));
-          row.addEventListener('mouseenter',()=>hover(n,new Set(it[5])));
+          row.addEventListener('mouseenter',()=>hover(n,new Set(ks(it))));
           row.addEventListener('mouseleave',()=>hover(n,null));
-          if(it[5].length)row.addEventListener('click',()=>pin(ik,n,new Set(it[5])));
+          if(it[5].length)row.addEventListener('click',()=>pin(ik,n,new Set(ks(it))));
           d.appendChild(row);
         });
         r.appendChild(d);
@@ -315,9 +321,9 @@ function renderMethod(mt,file,box){
   }
   wrap.appendChild(prod);wrap.appendChild(tests);wrap.appendChild(svg);box.appendChild(wrap);
   const arrows=[];
-  Object.keys(lineCards).forEach(n=>{lineCards[n].forEach(c=>{
-    const first=(mt.reach[c]||[])[0];
-    arrows.push({n:+n,c:c,to:(first&&trows[c+':'+first])||thead[c]});
+  Object.keys(lineCards).forEach(n=>{lineCards[n].forEach((p,key)=>{
+    const c=p[0],l=p[1];
+    arrows.push({n:+n,c:c,key:key,to:(l&&trows[c+':'+l])||thead[c]});
   })});
   const drawAll=arrows.length<=250;
   function draw(){
@@ -328,13 +334,14 @@ function renderMethod(mt,file,box){
     const ch=state.chip||state.pin;
     const pinned=[...prod.querySelectorAll('.ln.sel')].map(x=>+x.dataset.n);
     const focus=ch||state.line!=null||state.card!=null||pinned.length>0;
-    used.forEach(c=>tcards[c].classList.toggle('hot',ch?ch.set.has(c):state.card==c));
+    const hotC=ch?new Set([...ch.set].map(kc)):null;
+    used.forEach(c=>tcards[c].classList.toggle('hot',hotC?hotC.has(c):state.card==c));
     Object.values(trows).forEach(r=>r.classList.remove('mark'));
     Object.values(rows).forEach(r=>r.classList.remove('mark'));
     if(ch)(ch.n instanceof Set?[...ch.n]:[ch.n]).forEach(l=>{if(rows[l])rows[l].classList.add('mark')});
     arrows.forEach(a=>{
       let on,show;
-      if(ch){on=(ch.n instanceof Set?ch.n.has(a.n):ch.n==a.n)&&ch.set.has(a.c);show=on}
+      if(ch){on=(ch.n instanceof Set?ch.n.has(a.n):ch.n==a.n)&&ch.set.has(a.key);show=on}
       else{on=state.line==a.n||state.card==a.c||pinned.includes(a.n);show=drawAll||on}
       if(!show)return;
       if(on&&a.to.classList.contains('tl'))a.to.classList.add('mark');

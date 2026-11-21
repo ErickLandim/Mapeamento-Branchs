@@ -425,6 +425,7 @@ func (e *Evaluator) assertCall(c *ctx, name string, args []pascal.Expr) Value {
 					panic(r)
 				}
 			}()
+			e.closureUnit = fn.Fn.U
 			e.invokeIn(fn.Fn.R, fn.Fn.Self, nil, c, nil, nil, fn.Fn.Env)
 		}()
 		if name == "willnotraise" {

@@ -27,6 +27,9 @@ type Item struct {
 	Count    int64  `json:"count"`
 	Covered  bool   `json:"covered"`
 	Path     string `json:"path,omitempty"` // path items: "dec:out,..."
+	// Out: fora do escopo da análise (por exemplo, linha que o MR não mexeu);
+	// não entra nas porcentagens nem nos relatórios.
+	Out bool `json:"out,omitempty"`
 }
 
 // Key identifies an item independently of numbering, so results produced
@@ -100,6 +103,10 @@ type MethodReport struct {
 	// combinations proven impossible (left out of the percentages)
 	PathMode        string    `json:"pathMode,omitempty"`
 	ImpossiblePaths int       `json:"impossiblePaths"`
+	// Hidden: método fora do escopo (não mudou no MR, ou filtrado). Scope diz
+	// por que ele está no escopo: "novo" ou "alterado".
+	Hidden          bool      `json:"hidden,omitempty"`
+	Scope           string    `json:"scope,omitempty"`
 	Summary         Summary   `json:"summary"`
 	Paths           []PathRow `json:"paths"`
 	Items           []Item    `json:"items"`
@@ -341,27 +348,64 @@ func Compute(m *Map, h *Hits) *Report {
 				Kind: "caminho", Label: PathLabel(want, decByID), Count: n, Covered: n > 0, Path: key})
 		}
 	}
-	files := map[string]*Summary{}
 	for _, mr := range rep.Methods {
 		sort.SliceStable(mr.Paths, func(i, j int) bool { return mr.Paths[i].Sig < mr.Paths[j].Sig })
+	}
+	rep.Recount()
+	return rep
+}
+
+// Recount recalcula os totais ignorando métodos ocultos e itens fora do escopo.
+func (r *Report) Recount() {
+	r.Total = Summary{}
+	files := map[string]*Summary{}
+	for _, mr := range r.Methods {
+		mr.Summary = Summary{}
+		if mr.Hidden {
+			continue
+		}
 		fs := files[mr.File]
 		if fs == nil {
 			fs = &Summary{}
 			files[mr.File] = fs
 		}
 		for _, it := range mr.Items {
+			if it.Out {
+				continue
+			}
 			mr.Summary.add(it)
-			rep.Total.add(it)
+			r.Total.add(it)
 			fs.add(it)
 		}
 		mr.Summary.finish()
 	}
+	r.Files = map[string]Summary{}
 	for k, v := range files {
 		v.finish()
-		rep.Files[k] = *v
+		r.Files[k] = *v
 	}
-	rep.Total.finish()
-	return rep
+	r.Total.finish()
+}
+
+// Pruned devolve uma cópia só com o que está no escopo (sem métodos ocultos
+// nem itens fora do escopo), pronta para os relatórios de leitura.
+func (r *Report) Pruned() *Report {
+	out := &Report{Sources: r.Sources}
+	for _, mr := range r.Methods {
+		if mr.Hidden {
+			continue
+		}
+		c := *mr
+		c.Items = []Item{}
+		for _, it := range mr.Items {
+			if !it.Out {
+				c.Items = append(c.Items, it)
+			}
+		}
+		out.Methods = append(out.Methods, &c)
+	}
+	out.Recount()
+	return out
 }
 
 type pathOut struct {

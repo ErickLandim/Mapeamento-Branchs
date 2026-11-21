@@ -59,6 +59,10 @@ func (e *Evaluator) invokeIn(r *pascal.Routine, self *Object, cls *ClassInfo, ca
 		abort("routine without body: " + r.FullName)
 	}
 	u := e.unitOf(r)
+	if u == nil && e.closureUnit != nil { // anonymous routine: the unit is the one that created it
+		u = e.closureUnit
+	}
+	e.closureUnit = nil
 	parent := outer
 	if parent == nil {
 		parent = e.unitEnv(u)
@@ -243,6 +247,7 @@ func (e *Evaluator) exec(c *ctx, s pascal.Stmt) {
 	if e.curRun != nil && c.u != nil && !e.prod[c.u] {
 		if f := s.Sp().First; f >= 0 && f < len(c.u.Toks) {
 			e.curFile, e.curLine = c.u.Path, c.u.Toks[f].Line
+			e.switchLine()
 		}
 	}
 	switch s := s.(type) {

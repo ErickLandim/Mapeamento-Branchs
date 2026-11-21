@@ -484,6 +484,7 @@ func (e *Evaluator) evalArgsUnknown(c *ctx, args []pascal.Expr) {
 }
 
 func (e *Evaluator) callClosure(c *ctx, f *Closure, args []pascal.Expr) Value {
+	e.closureUnit = f.U
 	return e.invokeIn(f.R, f.Self, nil, c, nil, args, f.Env)
 }
 

@@ -1,0 +1,66 @@
+# Template do GitLab para o BCov. No .gitlab-ci.yml do seu projeto:
+#
+#   include:
+#     - project: 'grupo/pipelines-bcov'
+#       ref: main
+#       file: '/bcov.gitlab-ci.yml'
+#
+# Pronto: o job "cobertura-branches" roda em todo MR. Configure no .bcov.yml da
+# raiz do projeto (veja o README) ou com variáveis (BCOV_SRC, BCOV_TESTS, ...).
+# Troque 'grupo/pipelines-bcov' (aqui e em BCOV_PROJECT_PATH abaixo) pelo caminho
+# do projeto onde este repositório foi publicado.
+
+.bcov-vars:
+  variables:
+    GIT_DEPTH: "0"          # o diff do MR precisa do histórico completo
+    BCOV_CONFIG: ""         # outro arquivo de configuração (padrão .bcov.yml)
+    BCOV_SRC: ""            # pasta do código de produção
+    BCOV_TESTS: ""          # pasta dos testes
+    BCOV_IGNORAR: ""        # regras separadas por vírgula, ex.: ".dfm,legado/"
+    BCOV_MODO: ""           # tudo | diff
+    BCOV_METODOS: ""        # novos | alterados (modo diff)
+    BCOV_MINIMO: ""         # % mínima
+    BCOV_BASE: ""           # branch base do diff (padrão: alvo do MR)
+
+cobertura-branches:
+  extends: .bcov-vars
+  stage: test
+  image: golang:1.26
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script:
+    - |
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        git fetch --quiet origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      fi
+    - BCOV_DIR="${BCOV_DIR:-$CI_PROJECT_DIR/.bcov-tool}"
+    - |
+      if [ -z "$BCOV_TOOL_SRC" ]; then
+        git clone --quiet --depth 1 "${BCOV_REPO_URL:-https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${BCOV_PROJECT_PATH:-grupo/pipelines-bcov}.git}" "$BCOV_DIR"
+        BCOV_TOOL_SRC="$BCOV_DIR/tools/bcovscan"
+      fi
+    - (cd "$BCOV_TOOL_SRC" && go build -o /tmp/bcovscan .)
+  script:
+    - |
+      args="run --root ."
+      [ -n "$BCOV_CONFIG" ]  && args="$args --config $BCOV_CONFIG"
+      [ -n "$BCOV_SRC" ]     && args="$args --src $BCOV_SRC"
+      [ -n "$BCOV_TESTS" ]   && args="$args --tests $BCOV_TESTS"
+      [ -n "$BCOV_MODO" ]    && args="$args --modo $BCOV_MODO"
+      [ -n "$BCOV_METODOS" ] && args="$args --metodos $BCOV_METODOS"
+      [ -n "$BCOV_MINIMO" ]  && args="$args --minimo $BCOV_MINIMO"
+      [ -n "$BCOV_BASE" ]    && args="$args --base $BCOV_BASE"
+      if [ -n "$BCOV_IGNORAR" ]; then
+        for r in $(echo "$BCOV_IGNORAR" | tr ',' ' '); do args="$args --ignorar $r"; done
+      fi
+      /tmp/bcovscan $args
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - .bcov/relatorio/
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: .bcov/relatorio/cobertura.xml
