@@ -198,7 +198,8 @@ func (e *Evaluator) decision(c *ctx, s pascal.Stmt) *pascal.Decision {
 
 func (e *Evaluator) boolOf(v Value, what string) bool {
 	if v.K != KBool {
-		abort("condition not known: " + what + " = " + v.String())
+		// undecidable: explore both sides (alternative 0 = True, 1 = False)
+		return e.pick(2, "condition not known: "+what+" = "+v.String()) == 0
 	}
 	return v.B
 }
@@ -217,7 +218,7 @@ func (e *Evaluator) evalCond(c *ctx, d *pascal.Decision, cond pascal.Expr, flags
 		var known bool
 		v, known = e.evalTree(c, d, d.Tree)
 		if !known {
-			abort("condition not known: " + d.Text)
+			v = e.pick(2, "condition not known: "+d.Text) == 0
 		}
 	} else {
 		v = e.boolOf(e.eval(c, cond), d.Text)
@@ -416,7 +417,8 @@ func (e *Evaluator) execFor(c *ctx, s *pascal.For) {
 				co = coll.Obj.Coll
 			}
 			if co == nil || co.unknown || co.kind != "list" {
-				abort("for-in over unmodelled collection")
+				e.unknownLoop(c, s, iter, "for-in over unmodelled collection")
+				break
 			}
 			snap := append([]*Value(nil), co.items...)
 			for _, p := range snap {
@@ -425,14 +427,18 @@ func (e *Evaluator) execFor(c *ctx, s *pascal.For) {
 				}
 			}
 		default:
-			abort("for-in over unmodelled collection")
+			e.unknownLoop(c, s, iter, "for-in over unmodelled collection")
 		}
 	} else {
 		from, to := e.eval(c, s.From), e.eval(c, s.To)
 		fo, ok1 := from.ordinal()
 		to2, ok2 := to.ordinal()
 		if !ok1 || !ok2 {
-			abort("for bounds not known")
+			e.unknownLoop(c, s, iter, "for bounds not known")
+			if d != nil {
+				e.rec.FE(d.ID)
+			}
+			return
 		}
 		mk := func(i int64) Value {
 			switch from.K {
@@ -464,12 +470,33 @@ func (e *Evaluator) execFor(c *ctx, s *pascal.For) {
 	}
 }
 
+// unknownLoop: a for loop whose bounds or collection we cannot know. It runs
+// zero times on one path and once (loop variable unknown) on the other.
+func (e *Evaluator) unknownLoop(c *ctx, s *pascal.For, iter func(Value) bool, why string) {
+	if e.pick(2, why) == 1 {
+		iter(Unknown("loop variable"))
+	}
+}
+
 func (e *Evaluator) execCase(c *ctx, s *pascal.Case) {
 	d := e.decision(c, s)
 	sel := e.eval(c, s.Sel)
 	so, ok := sel.ordinal()
 	if !ok {
-		abort("case selector not known: " + sel.String())
+		// undecidable selector: one path per arm, plus the else/no-match path
+		k := e.pick(len(s.Arms)+1, "case selector not known: "+sel.String())
+		if k < len(s.Arms) {
+			if d != nil {
+				e.rec.H(s.Arms[k].Probe, d.ID, 1)
+			}
+			e.exec(c, s.Arms[k].Body)
+			return
+		}
+		if d != nil {
+			e.rec.H(s.ElseProbe, d.ID, 0)
+		}
+		e.execList(c, s.Else)
+		return
 	}
 	for _, arm := range s.Arms {
 		for _, l := range arm.Labels {

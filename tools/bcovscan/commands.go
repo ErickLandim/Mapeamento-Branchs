@@ -287,6 +287,10 @@ func cmdRun(args []string) error {
 	}
 	rep := cov.Compute(m, cov.Merge([]*cov.Hits{hits}))
 	span := methodSpans(a)
+	var possivel *cov.Report
+	if ev.Possible != nil {
+		possivel = cov.Compute(m, cov.Merge([]*cov.Hits{ev.Possible}))
+	}
 
 	info := cov.Info{Modo: "Projeto inteiro"}
 	if len(cfg.Ignorar) > 0 {
@@ -295,6 +299,9 @@ func cmdRun(args []string) error {
 	novos, alterados := 0, 0
 	if cfg.Modo == "diff" {
 		novos, alterados = aplicaDiff(r, baseSHA, cfg.Metodos, rep, span, diffs)
+		if possivel != nil {
+			aplicaDiff(r, baseSHA, cfg.Metodos, possivel, span, diffs)
+		}
 		if cfg.Metodos == "novos" {
 			info.Modo = "Diff do MR: só métodos novos"
 		} else {
@@ -305,6 +312,9 @@ func cmdRun(args []string) error {
 	fl8 := filtroLocal{Unit: *unit, Class: *class, Method: *method, Line: *line}
 	if fl8.ativo() {
 		fl8.aplica(rep, span)
+		if possivel != nil {
+			fl8.aplica(possivel, span)
+		}
 		info.Notas = append(info.Notas, fmt.Sprintf("Filtro local: unit=%q classe=%q método=%q linha=%d", fl8.Unit, fl8.Class, fl8.Method, fl8.Line))
 	}
 
@@ -314,6 +324,14 @@ func cmdRun(args []string) error {
 	bloqueia := alvoMR != "" && ghLike(cfg.BloquearEm, alvoMR)
 	var runErr error
 	pr := rep.Pruned()
+	if possivel != nil {
+		pp := possivel.Pruned()
+		if pp.Total.All.Covered > pr.Total.All.Covered {
+			info.Notas = append(info.Notas, fmt.Sprintf("Cobertura possível: %.1f%% (%d/%d). Itens que só alguns caminhos de condições não rastreadas alcançam; não entram na conta do mínimo.",
+				pp.Total.All.Percent, pp.Total.All.Covered, pp.Total.All.Total))
+			fmt.Printf("Cobertura possível : %d/%d (%.1f%%), contra %.1f%% garantida\n", pp.Total.All.Covered, pp.Total.All.Total, pp.Total.All.Percent, pr.Total.All.Percent)
+		}
+	}
 	switch {
 	case cfg.Modo == "diff" && len(pr.Methods) == 0:
 		info.Status, info.Aviso = "ok", "Nenhum método novo ou alterado neste MR: nada a validar."

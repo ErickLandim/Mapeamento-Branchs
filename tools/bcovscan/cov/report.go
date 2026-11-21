@@ -565,3 +565,138 @@ func (r *Report) WriteText(w io.Writer, detail bool) {
 		}
 	}
 }
+
+// Intersect keeps what every hits file covers: a row survives only when it
+// appears in all of them, with the smallest count of each outcome. Used when a
+// test was explored along several paths and only what all of them agree on is
+// certain.
+func Intersect(all []*Hits) *Hits {
+	if len(all) == 0 {
+		return Merge(nil)
+	}
+	if len(all) == 1 {
+		return Merge(all)
+	}
+	min2 := func(a, b [2]int64) [2]int64 {
+		if b[0] < a[0] {
+			a[0] = b[0]
+		}
+		if b[1] < a[1] {
+			a[1] = b[1]
+		}
+		return a
+	}
+	type pair = [2]int64
+	pairsOf := func(h *Hits, rows [][3]int64) map[int64]pair {
+		m := map[int64]pair{}
+		for _, r := range rows {
+			m[r[0]] = pair{r[1], r[2]}
+		}
+		return m
+	}
+	inter3 := func(sel func(*Hits) [][3]int64) [][3]int64 {
+		cur := pairsOf(all[0], sel(all[0]))
+		for _, h := range all[1:] {
+			nxt := pairsOf(h, sel(h))
+			for k, v := range cur {
+				o, ok := nxt[k]
+				if !ok {
+					delete(cur, k)
+					continue
+				}
+				cur[k] = min2(v, o)
+			}
+		}
+		out := [][3]int64{}
+		for k, v := range cur {
+			if v[0] > 0 || v[1] > 0 {
+				out = append(out, [3]int64{k, v[0], v[1]})
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] })
+		return out
+	}
+	out := &Hits{Version: 1, Source: all[0].Source, Combo: [][4]int64{}, Hit: [][2]int64{}, Path: []PathRow{}}
+	out.Dec = inter3(func(h *Hits) [][3]int64 { return h.Dec })
+	out.Cond = inter3(func(h *Hits) [][3]int64 { return h.Cond })
+	out.For = inter3(func(h *Hits) [][3]int64 { return h.For })
+	out.Meth = inter3(func(h *Hits) [][3]int64 { return h.Meth })
+
+	combo := map[[3]int64]int64{}
+	for _, r := range all[0].Combo {
+		combo[[3]int64{r[0], r[1], r[2]}] = r[3]
+	}
+	hit := map[int64]int64{}
+	for _, r := range all[0].Hit {
+		hit[r[0]] = r[1]
+	}
+	path := map[string]PathRow{}
+	for _, p := range all[0].Path {
+		path[fmt.Sprintf("%d|%s", p.Method, p.Sig)] = p
+	}
+	for _, h := range all[1:] {
+		nc := map[[3]int64]int64{}
+		for _, r := range h.Combo {
+			nc[[3]int64{r[0], r[1], r[2]}] = r[3]
+		}
+		for k, v := range combo {
+			o, ok := nc[k]
+			if !ok {
+				delete(combo, k)
+			} else if o < v {
+				combo[k] = o
+			}
+		}
+		nh := map[int64]int64{}
+		for _, r := range h.Hit {
+			nh[r[0]] = r[1]
+		}
+		for k, v := range hit {
+			o, ok := nh[k]
+			if !ok {
+				delete(hit, k)
+			} else if o < v {
+				hit[k] = o
+			}
+		}
+		np := map[string]PathRow{}
+		for _, p := range h.Path {
+			np[fmt.Sprintf("%d|%s", p.Method, p.Sig)] = p
+		}
+		for k, v := range path {
+			o, ok := np[k]
+			if !ok {
+				delete(path, k)
+			} else if o.Count < v.Count {
+				v.Count = o.Count
+				path[k] = v
+			}
+		}
+	}
+	for k, v := range combo {
+		out.Combo = append(out.Combo, [4]int64{k[0], k[1], k[2], v})
+	}
+	for k, v := range hit {
+		out.Hit = append(out.Hit, [2]int64{k, v})
+	}
+	for _, v := range path {
+		out.Path = append(out.Path, v)
+	}
+	sort.Slice(out.Combo, func(i, j int) bool {
+		a, b := out.Combo[i], out.Combo[j]
+		for x := 0; x < 3; x++ {
+			if a[x] != b[x] {
+				return a[x] < b[x]
+			}
+		}
+		return false
+	})
+	sort.Slice(out.Hit, func(i, j int) bool { return out.Hit[i][0] < out.Hit[j][0] })
+	sort.Slice(out.Path, func(i, j int) bool {
+		if out.Path[i].Method != out.Path[j].Method {
+			return out.Path[i].Method < out.Path[j].Method
+		}
+		return out.Path[i].Sig < out.Path[j].Sig
+	})
+	return out
+}
