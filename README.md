@@ -1,117 +1,86 @@
-# BCov: cobertura de branches para Delphi no pipeline
+# BCov
 
-Mede a cobertura de branches dos testes DUnit/DUnitX **sem compilar nada**: o `bcovscan` lê o código de produção e os testes, executa os testes com um interpretador e gera um relatório HTML único. Serve como etapa de pipeline no GitHub e no GitLab, no projeto inteiro ou só no diff do MR.
+Cobertura de branches para Delphi (DUnit e DUnitX), sem compilar nada. Lê o código e os testes, executa os testes com um interpretador e gera um `relatorio.html` único. Serve como etapa de pipeline (GitHub e GitLab) e para uso local.
 
-Para cada método ele mede:
+Mede, por método: branches, condições (`and`/`or`), combinações de condições e caminhos entre ifs. Combinações impossíveis não entram na conta.
 
-| Item | O que conta |
-|---|---|
-| Branches | os dois lados de cada `if`, `while` e `until`; cada rótulo de `case` e o `else`; `for` que entrou e que não entrou; e "nenhum entrou" (método chamado sem entrar em nenhum `if`/`case`/loop) |
-| Condições | cada termo de um `and`/`or` como verdadeiro e como falso |
-| Combinações | cada combinação possível de um `if` com curto-circuito, por exemplo `(T,F,-) => F` |
-| Caminhos entre ifs | cada caminho possível de uma chamada pelos ifs, cases e loops do método |
+## Instalar na máquina
 
-Combinações impossíveis (provadas pelo código) não entram na porcentagem. Se um teste usa algo que o interpretador não conhece, o teste para e avisa (`WARN`): a cobertura pode sair menor, nunca maior.
+Precisa de [Node](https://nodejs.org) e [Go](https://go.dev/dl) (o Go só compila a ferramenta, uma vez).
 
-## Usar em um projeto
-
-### 1. Configure (opcional): `.bcov.yml` na raiz do projeto
-
-Todas as chaves são opcionais. Sem arquivo, vale `src: src` e `tests: tests`, projeto inteiro.
-
-```yaml
-src: src                 # código de produção (pasta ou lista)
-tests: tests             # testes
-ignorar: [.dfm, legado/] # extensão, pasta ou padrão
-modo: diff               # tudo | diff
-metodos: novos           # novos | alterados   (só no modo diff)
+```
+npm install -g github:ErickLandim/Mapeamento-Branchs
 ```
 
-| Chave | Valores | O que faz |
-|---|---|---|
-| `src`, `tests` | pasta ou lista | onde estão o código e os testes |
-| `ignorar` | `.dfm`, `legado/`, `"*Gerado*"` | ignora arquivos. Com `.dfm` ele ignora também o `.pas` de mesmo nome (`uTela.dfm` ignora `uTela.pas`) |
-| `modo` | `tudo` (padrão), `diff` | `tudo` analisa o projeto inteiro; `diff` só o que o MR mudou |
-| `metodos` | `novos` (padrão), `alterados` | no `diff`: só métodos que não existiam na base, ou também os existentes que o MR mexeu |
-| `minimo` | número | cobertura mínima em %. Padrão: 100 no modo `diff`, sem mínimo no modo `tudo` |
-| `bloquear_em` | lista | MR para essas branches é bloqueado. Padrão: `main`, `master`, `integration*`, `develop*`, `release*` |
-| `base` | branch | base do diff. Padrão: o alvo do MR |
+Ou sem instalar, direto:
 
-### Modo diff e métodos existentes
+```
+npx github:ErickLandim/Mapeamento-Branchs --root C:\meu\projeto
+```
 
-- `metodos: novos`: só entra método criado no MR. Mexer em método antigo não exige nada. É o mais previsível.
-- `metodos: alterados`: entram também os métodos existentes que o MR tocou, mas só contam os itens (branches e condições) das **linhas que você mudou**. O resto do método não reprova. Caminhos entre ifs dependem do método todo e ficam de fora da conta.
-- O método é "novo" quando o nome não existe no arquivo da base (mover ou renomear arquivo não confunde). Rotina anônima segue o método que a contém.
+Só com Go: `go install github.com/ErickLandim/Mapeamento-Branchs/tools/bcovscan@latest` (o comando fica como `bcovscan run ...`). Repositório privado: precisa estar logado no git.
 
-### O mínimo bloqueia ou só avisa?
+## Usar
 
-Depende do alvo do MR:
+```
+bcov                                      # analisa a pasta atual
+bcov --root C:\projeto --src src --tests tests
+bcov --modo diff --base main              # só o que mudou em relação à main
+bcov --class TPedido --method Confirmar   # só uma parte
+```
 
-- MR da task para a feature: se a cobertura ficar abaixo do mínimo, o job termina com **aviso** e passa.
-- MR da feature para `main`, `master`, `integration*`, `develop*` ou `release*`: abaixo do mínimo o job **falha e bloqueia o MR**.
+`bcov-local.bat` faz o mesmo com perguntas (pasta, unit, classe, método, linha) e abre o relatório. `bcov --help` mostra todas as opções.
 
-O alvo é lido do pipeline (`CI_MERGE_REQUEST_TARGET_BRANCH_NAME` no GitLab, `GITHUB_BASE_REF` no GitHub). Sem alvo conhecido (execução local ou manual), só avisa.
-
-### 2a. GitHub
+## Configurar: `.bcov.yml` na raiz do projeto (opcional)
 
 ```yaml
-# .github/workflows/cobertura.yml
-name: Cobertura de branches
+src: src                 # código de produção
+tests: tests             # testes
+ignorar: [.dfm, legado/] # .dfm ignora também o .pas de mesmo nome
+modo: diff               # tudo | diff (só o que o MR mudou)
+metodos: novos           # novos | alterados (só no modo diff)
+minimo: 100              # % mínima (padrão: 100 no diff, nenhum no tudo)
+bloquear_em: [main, master, integration*, develop*, release*]
+```
+
+Todas as chaves são opcionais.
+
+- **Modo diff, `novos`:** só métodos que não existiam na base. Mexer em método antigo não exige nada.
+- **Modo diff, `alterados`:** também métodos existentes que o MR mexeu, contando só os itens das linhas mudadas.
+- **Mínimo:** abaixo dele, MR para uma branch de `bloquear_em` é **bloqueado**; para qualquer outra (task para feature) só **avisa**. O alvo vem do pipeline.
+
+## Pipeline
+
+**GitHub**
+
+```yaml
 on: pull_request
 jobs:
   cobertura:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0          # o diff precisa do histórico completo
-      - uses: ORG/Mapeamento-Branchs@main
-        with:
-          modo: diff              # o resto vem do .bcov.yml
+        with: { fetch-depth: 0 }      # o diff precisa do histórico
+      - uses: ErickLandim/Mapeamento-Branchs@main
 ```
 
-A action aceita `config`, `src`, `tests`, `ignorar` (separado por vírgula), `modo`, `metodos`, `minimo` e `base`. O relatório sai como artefato `relatorio-cobertura`, e o resumo aparece na página do job. Repositório privado: em Settings > Actions > General do repositório da ferramenta, permita o acesso de outros repositórios.
+Aceita `config`, `src`, `tests`, `ignorar`, `modo`, `metodos`, `minimo` e `base`. Repositório privado: libere em Settings > Actions > General > Access.
 
-### 2b. GitLab
-
-Suba este repositório como um projeto de pipeline da sua empresa (por exemplo `grupo/pipelines-bcov`). Em `bcov.gitlab-ci.yml`, troque uma vez o caminho padrão `BCOV_PROJECT_PATH` para o seu. Depois, no `.gitlab-ci.yml` de cada projeto:
+**GitLab:** suba este repositório como projeto de pipeline da empresa, troque uma vez o caminho `grupo/pipelines-bcov` em `bcov.gitlab-ci.yml` e, em cada projeto:
 
 ```yaml
 include:
   - project: 'grupo/pipelines-bcov'
     ref: main
     file: '/bcov.gitlab-ci.yml'
-
-variables:
-  BCOV_MODO: diff     # o resto vem do .bcov.yml
 ```
 
-O `include` traz só o YAML do template. O job baixa o código do `bcovscan` do próprio projeto de pipeline e compila (leva alguns segundos). O job roda em todo MR com `GIT_DEPTH: 0` para o diff. Variáveis opcionais: `BCOV_CONFIG`, `BCOV_SRC`, `BCOV_TESTS`, `BCOV_IGNORAR`, `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_BASE`. A cobertura aparece no MR (Cobertura XML) e o relatório HTML sai como artefato.
+Variáveis opcionais: `BCOV_MODO`, `BCOV_METODOS`, `BCOV_MINIMO`, `BCOV_SRC`, `BCOV_TESTS`, `BCOV_IGNORAR`, `BCOV_BASE`.
 
-## O relatório
+## Relatório
 
-`relatorio.html`, um arquivo só, com três abas:
+`relatorio.html` com três abas: **Resumo** (o que falta cobrir, em português), **Rastreio** (cada método com setas até a linha do teste que o cobriu) e **Cobertura** (tabela técnica). Saem também `coverage.json`, `cobertura.xml` e `coverage.txt`, em `.bcov/relatorio`.
 
-- **Resumo**: uma linha por método, em português simples, dizendo o que os testes não exercitaram.
-- **Rastreio**: cada método com o código inteiro, o que cada linha cobre e setas até a linha do teste que a executou. Dá para filtrar por faixa de cobertura e arrastar os cards de teste.
-- **Cobertura**: tabela técnica de todos os itens, método a método.
+## Limite
 
-Também saem `coverage.json`, `cobertura.xml` (GitLab) e `coverage.txt`. Pasta padrão: `.bcov/relatorio`.
-
-## Uso local
-
-`bcov-local.bat` pergunta pasta do projeto, pastas de código e testes, o que ignorar e, se quiser olhar só uma parte, unit, classe, método e linha. Também pergunta se quer só o que mudou em relação a uma branch. Depois roda e abre o relatório. Precisa do Go para compilar na primeira vez (ou do `bcovscan.exe` já em `tools/bcovscan`).
-
-Direto na linha de comando:
-
-```
-cd tools/bcovscan && go build -o bcovscan.exe .
-bcovscan.exe run --root C:\meu\projeto --src src --tests tests --class TPedido --method Confirmar
-```
-
-Todas as opções: `bcovscan.exe run` sem argumentos válidos mostra a ajuda. As opções sobrescrevem o `.bcov.yml`.
-
-## Estrutura
-
-- `tools/bcovscan/`: a ferramenta (Go): analisador Pascal (`pascal/`), interpretador de testes (`interp/`), cálculo e relatórios (`cov/`).
-- `action.yml`: action do GitHub. `bcov.gitlab-ci.yml`: template do GitLab.
+Se um teste usa algo que o interpretador não conhece, ele para e avisa no log (`parcial`). A cobertura pode sair menor que a real, nunca maior.
