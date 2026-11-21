@@ -254,7 +254,7 @@ func cmdRun(args []string) error {
 	ev.Verbose = *verbose
 	hits, log := ev.RunTests()
 	for _, l := range log {
-		if strings.HasPrefix(l, "WARN") {
+		if strings.HasPrefix(l, "WARN") || strings.HasPrefix(l, "test ") || *verbose {
 			fmt.Println(l)
 		}
 	}
